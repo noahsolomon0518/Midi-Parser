@@ -16,6 +16,7 @@ class NoahsOneTrackMidi:
         self.tPB = mido.ticks_per_beat
         self.oneTrack = self.restructToOneTrack(mido)
         self.timing = "abs"
+        self.key = None
         
     
     def findTempo(self, mido):
@@ -26,7 +27,6 @@ class NoahsOneTrackMidi:
             return 500000
         
     
-    
     def restructToOneTrack(self, mido):
         
         absoluteTiming = []
@@ -36,6 +36,10 @@ class NoahsOneTrackMidi:
                 _time+=msg.time
                 if(msg.type=="note_on" or msg.type == "note_off"):
                     absoluteTiming.append([msg, _time])
+                
+                if(msg.type=="key_signature"): 
+                    self.key= msg.key
+                    print(self.key)
                     
         absoluteTiming.sort(key = lambda x: x[1])
         self.midi = absoluteTiming
@@ -51,7 +55,7 @@ class NoahsOneTrackMidi:
             relTime.append([absTime[i+1][0], newDeltaTime])
         
         self.midi = relTime
-        print(relTime[20], self.midi[20])
+
         self.timing = "rel"
         
     def relTimeToAbs(self):

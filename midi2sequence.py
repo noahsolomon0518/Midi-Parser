@@ -15,12 +15,10 @@ from mido_tools import MidoEncode, MidoUtils
 #Parses a folder full of midi files
 class Midi2Sequence:
     
-    
-    NOTE_ON = 144
-    NOTE_OFF = 128
+
     
     
-    def __init__(self,folder,uniqueTimeEncoding = True, timeNormalization = 8,r = True ):
+    def __init__(self,folder, r = True ):
         self.folder = folder
         self.midoEncode = MidoEncode()
         self.midiPaths = []
@@ -95,7 +93,7 @@ class Midi2Sequence:
 
     
     
-    
+print("test")
 
 
 
@@ -120,7 +118,7 @@ testM2M()
 def testParseFold():
     mf = Midi2Sequence("data")
     mf.parseMidis()
-    MidoUtils.playEncodedMido(mf.sequentializedMidis[3])
+   
     
     
 #MidoUtils.playEncodedMido(Midi2Sequence.parseTrack("data/someothermidis/bachmusic1.mid", True))
