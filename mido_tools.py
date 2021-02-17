@@ -9,9 +9,26 @@ import numpy as np
 import fluidsynth 
 
 
+class Note:
+    def __init__(self, note, time, isNoteOn, velocity):
+        self.absoluteTime = time
+        self.deltaTime = None
+        self.note = note
+        self.isNoteOn = isNoteOn
+        self.velocity = velocity
+        
+    def setDeltaTime(self,t):
+        self.deltaTime = t
+        
+        
+        
+        
+        
+        
+        
+        
     
-    
-class NoahsOneTrackMidi:
+class OneTrackMidi:
     def __init__(self, mido):
         self.tPB = mido.ticks_per_beat
         self.oneTrack = self.restructToOneTrack(mido)
@@ -27,50 +44,75 @@ class NoahsOneTrackMidi:
             return 500000
         
     
+        
+    #notesType1: notes where relative time is measured in terms of track
+    #notesType0: notes where relative time measured in terms of all tracks
     def restructToOneTrack(self, mido):
         
-        absoluteTiming = []
+        notesType1 = []
         for track in mido.tracks:
             _time = 0
             for msg in track:
                 _time+=msg.time
                 if(msg.type=="note_on" or msg.type == "note_off"):
-                    absoluteTiming.append([msg, _time])
+                    notesType1.append(Note(msg.note, 
+                                           _time, 
+                                           msg.type, 
+                                           msg.velocity))
                 
                 if(msg.type=="key_signature"): 
                     self.key= msg.key
-                    print(self.key)
                     
-        absoluteTiming.sort(key = lambda x: x[1])
-        self.midi = absoluteTiming
+        
+        notesType1.sort(key = lambda x: x.absoluteTime)
+        for note in notesType1:
+            print(note.absoluteTime)
+        self.midi = notesType1
         
         
     def absTimeToRel(self):
         assert self.timing == "abs"
-        relTime = []
+        notesType0 = []
         absTime = self.midi.copy()
-        relTime.append(absTime[0])
-        for i, value in enumerate(absTime[1:]):
-            newDeltaTime = absTime[i+1][1] - absTime[i][1]
-            relTime.append([absTime[i+1][0], newDeltaTime])
+        firstNote = absTime[0]
+        firstNote.setDeltaTime(0)
+        notesType0.append(firstNote)
         
-        self.midi = relTime
+        
+        for i in range(len(absTime[1:])-1):
+            currentNote = absTime[i+1]
+            previousNote = absTime[i]
+            deltaTime = currentNote.absoluteTime - previousNote.absoluteTime
+            currentNote.setDeltaTime(deltaTime)
+            notesType0.append(currentNote)
+        
+        self.midi = notesType0
+           
 
         self.timing = "rel"
         
     def relTimeToAbs(self):
         assert self.timing == "rel"
         
+        
+        
+        
+        
+        
+        
+        
+        
 #Takes a reconstructed mido object and encodes it to 
 class MidoEncode:
     
     #Takes in mido object then restructures into 1 track without delta time bs
     def encode(self, mf):
-        oneTrackMidi = NoahsOneTrackMidi(mf)
+        oneTrackMidi = OneTrackMidi(mf)
         oneTrackMidi.absTimeToRel()
         encodedMido = []
-        for msg in oneTrackMidi.midi:
-            encNote = MidoUtils.encodeNote(msg, oneTrackMidi.tPB)
+        for note in oneTrackMidi.midi:
+            
+            encNote = MidoUtils.encodeNote(note, oneTrackMidi.tPB)
             encodedMido.extend(encNote)
         return encodedMido
     
@@ -98,25 +140,23 @@ class MidoUtils:
      
     
 
-
+    #ticks per beat/8 = 32nd notes
     @staticmethod
-    def encodeNote(msg, tpb):
+    def encodeNote(note, tpb):
         norm = tpb/8
+        normalizedDT = round(note.deltaTime/norm)
         waitTime = []
-        msgObj = msg[0]
-        msgDeltaTime = msg[1]
-        normalizedDT = round(msgDeltaTime/norm)
         waitTime = [175+normalizedDT] if normalizedDT>0 else []
-        if(msgObj.type=="note_on"):
+        if(note.isNoteOn):
             
-            if(msgObj.velocity==0):
-                waitTime.append(msgObj.note)
+            if(note.velocity==0):
+                waitTime.append(note.note)
                 return waitTime
             else:
-                waitTime.append(msgObj.note+88)
+                waitTime.append(note.note+88)
                 return waitTime
         else:
-            waitTime.append(msgObj.note)
+            waitTime.append(note.note)
             return waitTime
     
         

@@ -93,7 +93,6 @@ class Midi2Sequence:
 
     
     
-print("test")
 
 
 
@@ -118,10 +117,7 @@ testM2M()
 def testParseFold():
     mf = Midi2Sequence("data")
     mf.parseMidis()
-   
-    
-    
-#MidoUtils.playEncodedMido(Midi2Sequence.parseTrack("data/someothermidis/bachmusic1.mid", True))
+    MidoUtils.playEncodedMido(mf.sequentializedMidis[0])
     
 testParseFold()
     
