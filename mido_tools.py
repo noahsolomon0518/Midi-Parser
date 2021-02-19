@@ -21,12 +21,6 @@ class Note:
         self.deltaTime = t
         
         
-        
-        
-        
-        
-        
-        
     
 class OneTrackMidi:
     def __init__(self, mido):
@@ -34,14 +28,6 @@ class OneTrackMidi:
         self.oneTrack = self.restructToOneTrack(mido)
         self.timing = "abs"
         self.key = None
-        
-    
-    def findTempo(self, mido):
-        for track in mido.tracks:
-            for msg in track:
-                if(msg.type=="tempo"):
-                    return msg.tempo
-            return 500000
         
     
         
@@ -65,8 +51,6 @@ class OneTrackMidi:
                     
         
         notesType1.sort(key = lambda x: x.absoluteTime)
-        for note in notesType1:
-            print(note.absoluteTime)
         self.midi = notesType1
         
         
@@ -87,14 +71,7 @@ class OneTrackMidi:
             notesType0.append(currentNote)
         
         self.midi = notesType0
-           
 
-        self.timing = "rel"
-        
-    def relTimeToAbs(self):
-        assert self.timing == "rel"
-        
-        
         
         
         
@@ -111,7 +88,6 @@ class MidoEncode:
         oneTrackMidi.absTimeToRel()
         encodedMido = []
         for note in oneTrackMidi.midi:
-            
             encNote = MidoUtils.encodeNote(note, oneTrackMidi.tPB)
             encodedMido.extend(encNote)
         return encodedMido
@@ -161,48 +137,4 @@ class MidoUtils:
     
         
 
-        
-        
-    
-    
-    
-    
-    
-import inspect
-   
-class MidoRestructTest:
-    @staticmethod   
-    def testPassed():
-        print(str(inspect.stack()[1][3])+": " + "PASSED")
-        
-        
-    @staticmethod
-    def getTestMido():
-        return MidiFile('data/someothermidis/bachmusic2.mid')
-    
-    
-    @staticmethod
-    def encodeTest():
-        testMido = MidoRestructTest.getTestMido()
-        mr = MidoEncode(True, 8)
-        enc = mr.encode(testMido)
-        MidoUtils.playEncodedMido(enc)
-        
 
-    
-        MidoRestructTest.testPassed()
-        
-       
-        
-
-        
-        
- 
-        
-        
-    
-    
-    
-    
-#MidoRestructTest.encodeTest()
-#MidoRestructTest.restructLengthOfTrackTest()

@@ -54,7 +54,7 @@ class Midi2Sequence:
     def parseTrack(self,file, log = False):
         assert ".mid" in file
         print("Parsing", file)
-        mf = MidiFile(file,ticks_per_beat=480)
+        mf = MidiFile(file)
         if(log):
             Midi2Sequence._logParsedMidi(mf)
         sequentializedMidi = self.midoEncode.encode(mf)
