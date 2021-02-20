@@ -1,5 +1,4 @@
 data/*
-piano.sf2
-piano2.sf2
+soundsfonts/*
 .spyproject/*
 __pycache__/*
