@@ -1,8 +1,15 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Feb 23 13:42:39 2021
+
+@author: noahs
+"""
+
 import numpy as np
 
 
 
-class SequenceToOneHot:
+class ToOneHot:
     def __init__(self, sampleLength, gap, oneHotDimension):
         self.sampleLength = sampleLength
         self.gap = gap
@@ -45,24 +52,4 @@ class SequenceToOneHot:
             
     def getNSamples(self, sequence):
         return (len(sequence)-self.sampleLength)//self.gap
-    
-    
-    def invertOneHot(self):
-        pass
-    
-    
-    
-    
-    
-    
-    
-def test():
-    toOneHot = SequenceToOneHot(4, 2, 4)
-    data = [[0,2,1,3,2,3,2,2,2,2,2,2,2,2,2,2,2,1,2,3,1,2,2,2,2,2,2,2,2],
-            [3,3,3,0,0,1,3],
-            [1,2]]
-    toOneHot.fit(data)
-    print(toOneHot.xEncoded)
-    print(toOneHot.yEncoded)
-#test()    
     
