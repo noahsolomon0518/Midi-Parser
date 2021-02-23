@@ -1,4 +1,2 @@
-data/*
-soundsfonts/*
-.spyproject/*
 __pycache__/*
+soundfonts/*
