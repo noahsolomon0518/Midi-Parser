@@ -19,5 +19,9 @@ class TestParser(unittest.TestCase):
         p = Parser("data")
         p.parse(10, 3, 500)
         assert p.getData() != None
-
+        print(len(p.encoded))
+        for i in range(20):
+            
+            p.playEncoded(-i-20)
+        
         

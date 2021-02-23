@@ -58,7 +58,7 @@ class Parser:
         fs.program_select(0, sfid, 0, 0)
         for msg in self.encoded[ind]:
             if(msg>=176):
-                time.sleep((msg-175)*0.005)
+                time.sleep((msg-175)*0.03)
             elif(msg>88):
                 fs.noteon(0, msg-88, 100)
             else:
