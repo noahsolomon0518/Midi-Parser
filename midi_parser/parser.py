@@ -9,9 +9,7 @@ import fluidsynth
 import time
 from os import path, walk
 
-from .helpers.midi_path_extractor import MidiPathExtractor
-from .helpers.midi_to_mido import MidiToMido
-from .helpers.mido_to_one_track import MidoToOT
+
 from .helpers.one_track_encoder import NormalizedOTEncoder
 from .helpers.to_one_hot import ToOneHot
 import os
@@ -61,6 +59,64 @@ def findMidis(folder, r = True):
 
 
 
+class Note:
+    def __init__(self, note, time, type, velocity):
+        self.note = note
+        self.time = time
+        self.velocity = velocity
+        if(velocity == 0):
+            self.type = "note_off"
+        else:
+            self.type = type
+        
+    
+
+
+### Dumbed down mido object with one track
+
+class OneTrack:
+    def __init__(self, mido):
+        self.mido = mido
+        self.notes = []
+        self.notesAbs = self._extractNotesAbs()
+        self.notesRel = self._convertToNotesRel()
+        self.tpb = self.ticks_per_beat
+        
+    def _extractNotesAbs(self):
+        
+        
+        for track in self.mido.tracks:
+            _time = 0
+            for msg in track:
+                _time+=msg.time
+                if(msg.type=="note_on" or msg.type == "note_off"):
+                    self.notesAbs.append(Note(msg.note, 
+                                           _time,
+                                           msg.type,
+                                           msg.velocity))
+                
+        
+        self.notesAbs.sort(key = lambda x: x.time)
+        
+    
+    def _convertToNotesRel(self):
+        notesAbs = self.notesAbs
+        firstNote = notesAbs[0]
+        firstNote.time = 0
+        self.notesRel.append(firstNote)
+        
+        
+        for i in range(len(notesAbs[1:])-1):
+            currentNote = notesAbs[i+1]
+            previousNote = notesAbs[i]
+            deltaTime = currentNote.time - previousNote.time
+            currentNoteCopy = currentNote.copy()
+            currentNoteCopy.time = deltaTime
+            self.notesRel.append(currentNoteCopy)
+
+
+
+
 
 
 
@@ -77,9 +133,9 @@ class Parser:
     
     
     def __init__(self, folder, r = True, encodingMethod = 'normalizedOT'):
-        self.midos = None
-        self.oneTracks = None
-        self.encoded = None
+        self.midos = []
+        self.oneTracks = []
+        self.encoded = []
         self.x = None
         self.y = None
         self.paths = []
@@ -93,14 +149,33 @@ class Parser:
     def parse(self, maxLen, gap, maxDim):
         self.midos = parseToMidos(self.paths)
         
-        self.oneTracks = MidoToOT(self.midos).oneTracks
+        self._midosToOT(self.midos)
+        
+        
         self.encoded = NormalizedOTEncoder(self.oneTracks).encodedOTs
+        
+        
+        
         oneHot = ToOneHot(maxLen, gap, maxDim)
         oneHot.fit(self.encoded)
+        
+        
+        
+        
         self.x = oneHot.xEncoded
         self.y = oneHot.yEncoded
         
         
+    def _midosToOT(self):
+        for mido in self.midos:
+            self.oneTracks.append(OneTrack(mido))
+            
+            
+            
+            
+            
+            
+            
         
     def getData(self):
         return (self.x,self.y)
