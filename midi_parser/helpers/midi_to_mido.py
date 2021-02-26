@@ -17,6 +17,8 @@ class MidiToMido:
             
         for path in paths:
             self.midos.append(MidiFile(path, type = 0))
+          
+		
             
     
     
