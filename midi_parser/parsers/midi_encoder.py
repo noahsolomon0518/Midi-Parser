@@ -8,12 +8,10 @@ Created on Tue Feb 23 13:45:41 2021
 import fluidsynth
 import time
 from os import path, walk
-
-
-from .helpers.one_track_encoder import NormalizedOTEncoder
-from .helpers.to_one_hot import ToOneHot
+import numpy as np
+from ..helpers.one_track_encoder import NormalizedOTEncoder
 import os
-
+import warnings
 from mido import MidiFile
 
 sf2 = os.path.abspath("C:/Users/noahs/Local Python Libraries/midi_parser/soundfonts/piano.sf2")
@@ -137,51 +135,40 @@ class OneTrack:
 
 
 #Main class to be used. Takes in directory and parses all midis to encoded sequences
-class Parser:
+class OTEncoder:
     
     
     def __init__(self, folder, r = True, encodingMethod = 'normalizedOT'):
         self.midos = []
         self.oneTracks = []
         self.encoded = []
-        self.x = None
-        self.y = None
         self.paths = []
         self.addFolders(folder, r = True)
         self.encodingMethod = encodingMethod
         
         
     def addFolders(self, folder , r =True):
-        
         self.paths.extend(findMidis(folder, r))
         
-    def parse(self, maxLen, gap, maxDim):
+    def encode(self):
+        self._pathsToMidos()
+        self._midosToOT()
+        self._OTEncode()
+        
+       
+        
+       
+    def _pathsToMidos(self):
         self.midos = parseToMidos(self.paths)
         
-        self._midosToOT()
-        
-        
+    def _OTEncode(self):
         self.encoded = NormalizedOTEncoder(self.oneTracks).encodedOTs
-        
-        
-        
-        oneHot = ToOneHot(maxLen, gap, maxDim)
-        oneHot.fit(self.encoded)
-        
-        
-        
-        
-        self.x = oneHot.xEncoded
-        self.y = oneHot.yEncoded
-        
         
     def _midosToOT(self):
         for mido in self.midos:
             self.oneTracks.append(OneTrack(mido))
             
-            
-    def getData(self):
-        return (self.x,self.y)
+
     
     
     
@@ -204,6 +191,54 @@ class Parser:
 
 
 
+
+
+#One hot encoder for recurrent neural networks
+class OneHotEncoder:
+    def __init__(self, sampleLength, gap, oneHotDimension):
+        self.sampleLength = sampleLength
+        self.gap = gap
+        self.oneHotDimension = oneHotDimension
+        self.xEncoded = []
+        self.yEncoded = []
+        
+    def encode(self, sequences):
+        for sequence in sequences:
+            self.oneHotEncodeSequence(sequence)
+        self.xEncoded = np.array(self.xEncoded)
+        self.yEncoded = np.array(self.yEncoded)   
+    
+    
+    def oneHotEncodeSequence(self,sequence):
+        nSamples = self.getNSamples(sequence)
+        for i in range(nSamples):
+            xSample = sequence[i*self.gap:(i)*self.gap + self.sampleLength]
+            ySample = sequence[(i)*self.gap + self.sampleLength]
+            self.oneHotEncodeSample(xSample, ySample)
+            
+    
+    
+    def oneHotEncodeSample(self,x,y):
+        xOneHot = np.zeros((self.sampleLength,self.oneHotDimension))
+        yOneHot = np.zeros((self.oneHotDimension))
+        
+        if(y>=self.oneHotDimension):
+                yOneHot[self.oneHotDimension-1] = 1
+        else:
+            yOneHot[y] = 1
+        for i,sample in enumerate(x):
+            if(sample>=self.oneHotDimension):
+                warnings.warn("Encoded number > one hot vectors dimension")
+                xOneHot[i][self.oneHotDimension-1] = 1
+            else:
+                xOneHot[i][sample] = 1
+        self.xEncoded.append(xOneHot)
+        self.yEncoded.append(yOneHot)
+            
+            
+    def getNSamples(self, sequence):
+        return (len(sequence)-self.sampleLength)//self.gap
+    
 
     
 
