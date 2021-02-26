@@ -28,7 +28,7 @@ sf2 = os.path.abspath("C:/Users/noahs/Local Python Libraries/midi_parser/soundfo
 
 
 
-
+#Takes list of paths (or just one), and parses into mido object
 def parseToMidos(paths):
     midos = []
     
@@ -42,24 +42,38 @@ def parseToMidos(paths):
 
 
 
+
+
+#Recursively creates list of midi files in directory
 def findMidis(folder, r = True):
         paths = []
         if(".mid" in folder):
             paths.append(folder)
-            return
+            return paths
             
         for (dirpath, dirnames, filenames) in walk(folder):
             for file in filenames:
                 if ".mid" in file:
                     paths.append(path.join(dirpath,file))
             if not r:
-                break
+                return paths
+        return paths
+            
 
 
 
+'''
+###
+
+---Classes---
+
+###
+'''
 
 
-class Note:
+
+#OneTrack object uses Note to simplify midi representation
+class Note():
     def __init__(self, note, time, type, velocity):
         self.note = note
         self.time = time
@@ -68,19 +82,24 @@ class Note:
             self.type = "note_off"
         else:
             self.type = type
+    
+    
+    def copy(self):
+        return Note(self.note, self.time, self.type, self.velocity)
         
     
 
 
-### Dumbed down mido object with one track
-
+# Dumbed down mido object with one track
 class OneTrack:
     def __init__(self, mido):
         self.mido = mido
         self.notes = []
-        self.notesAbs = self._extractNotesAbs()
-        self.notesRel = self._convertToNotesRel()
-        self.tpb = self.ticks_per_beat
+        self.notesAbs = [] 
+        self.notesRel = [] 
+        self._extractNotesAbs()
+        self._convertToNotesRel()
+        self.tpb = mido.ticks_per_beat
         
     def _extractNotesAbs(self):
         
@@ -117,18 +136,7 @@ class OneTrack:
 
 
 
-
-
-
-'''
-###
-
---Parser Class--
-
-###
-'''
-
-
+#Main class to be used. Takes in directory and parses all midis to encoded sequences
 class Parser:
     
     
@@ -144,12 +152,13 @@ class Parser:
         
         
     def addFolders(self, folder , r =True):
-        self.paths.extend(Parser.findMidis(folder, r))
+        
+        self.paths.extend(findMidis(folder, r))
         
     def parse(self, maxLen, gap, maxDim):
         self.midos = parseToMidos(self.paths)
         
-        self._midosToOT(self.midos)
+        self._midosToOT()
         
         
         self.encoded = NormalizedOTEncoder(self.oneTracks).encodedOTs
@@ -171,12 +180,6 @@ class Parser:
             self.oneTracks.append(OneTrack(mido))
             
             
-            
-            
-            
-            
-            
-        
     def getData(self):
         return (self.x,self.y)
     
