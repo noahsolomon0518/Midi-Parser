@@ -16,7 +16,10 @@ class MidiToMido:
             paths = [paths]
             
         for path in paths:
-            self.midos.append(MidiFile(path, type = 0))
+	    try:
+            	self.midos.append(MidiFile(path, type = 0))
+            except:
+		print(path, "corrupted")
             
     
     
