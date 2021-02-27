@@ -58,6 +58,12 @@ def findMidis(folder, r = True):
         return paths
             
 
+#Encompasses entire process of encoding for NN,  from getting midi paths to one hot encoding
+def pathsToOneHot(OTEncoder, OneHotEncoder):
+    OTEncoder.encode()
+    sequences = OTEncoder.encoded
+    OneHotEncoder.encode(sequences)
+    return (OneHotEncoder.xEncoded, OneHotEncoder.yEncoded)
 
 
 '''
