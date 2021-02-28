@@ -9,7 +9,7 @@ import fluidsynth
 import time
 from os import path, walk
 import numpy as np
-from ..helpers.one_track_encoder import NormalizedOTEncoder
+from .one_track_encoder import RoundedOTEncoder
 import os
 import warnings
 from mido import MidiFile
@@ -36,6 +36,7 @@ def parseToMidos(paths):
     for _path in paths:
         midos.append(MidiFile(_path, type = 0))
         
+
     return midos
 
 
@@ -59,9 +60,9 @@ def findMidis(folder, r = True):
             
 
 #Encompasses entire process of encoding for NN,  from getting midi paths to one hot encoding
-def pathsToOneHot(OTEncoder, OneHotEncoder):
-    OTEncoder.encode()
-    sequences = OTEncoder.encoded
+def pathsToOneHot(MidiToDecimal, OneHotEncoder):
+    MidiToDecimal.encode()
+    sequences = MidiToDecimal.encoded
     OneHotEncoder.encode(sequences)
     return (OneHotEncoder.xEncoded, OneHotEncoder.yEncoded)
 
@@ -112,18 +113,18 @@ class OneTrack:
             _time = 0
             for msg in track:
                 _time+=msg.time
+                
                 if(msg.type=="note_on" or msg.type == "note_off"):
                     self.notesAbs.append(Note(msg.note, 
                                            _time,
                                            msg.type,
                                            msg.velocity))
                 
-        
         self.notesAbs.sort(key = lambda x: x.time)
         
     
     def _convertToNotesRel(self):
-        notesAbs = self.notesAbs
+        notesAbs = self.notesAbs.copy()
         firstNote = notesAbs[0]
         firstNote.time = 0
         self.notesRel.append(firstNote)
@@ -136,12 +137,13 @@ class OneTrack:
             currentNoteCopy = currentNote.copy()
             currentNoteCopy.time = deltaTime
             self.notesRel.append(currentNoteCopy)
-
+            
+        
 
 
 
 #Main class to be used. Takes in directory and parses all midis to encoded sequences
-class OTEncoder:
+class MidiToDecimal:
     
     
     def __init__(self, folder, r = True, encodingMethod = 'normalizedOT'):
@@ -168,11 +170,14 @@ class OTEncoder:
         self.midos = parseToMidos(self.paths)
         
     def _OTEncode(self):
-        self.encoded = NormalizedOTEncoder(self.oneTracks).encodedOTs
+        self.encoded = RoundedOTEncoder(self.oneTracks).encodedOTs
+        
         
     def _midosToOT(self):
         for mido in self.midos:
             self.oneTracks.append(OneTrack(mido))
+        print(self.oneTracks[0].notesAbs[0].note)
+       
             
 
     
@@ -209,6 +214,8 @@ class OneHotEncoder:
         self.yEncoded = []
         
     def encode(self, sequences):
+        self.xEncoded = []
+        self.yEncoded = []
         for sequence in sequences:
             self.oneHotEncodeSequence(sequence)
         self.xEncoded = np.array(self.xEncoded)

@@ -5,11 +5,12 @@ Created on Tue Feb 23 15:26:27 2021
 @author: noahs
 """
 
-from midi_parser.parsers.midi_encoder import OTEncoder, OneHotEncoder
+from midi_parser.parsers.midi_encoder import MidiToDecimal, OneHotEncoder
+from midi_parser.parsers import midi_encoder
 
 import unittest
 
-p = OTEncoder("data")
+p = MidiToDecimal("data")
 p.encode()
 
 
@@ -19,17 +20,21 @@ class TestOTEncoder(unittest.TestCase):
     
     
     def test_encoded_exist(self):
-        assert len(p.encoded)!=0
+        
+        for encMidi in p.encoded:
+            assert len(encMidi)>0
         
         
     def test_encoded_less_than_500(self):
         for encMidi in p.encoded:
+            
             for msg in encMidi:
                 assert msg<500          
                     
                 
     def test_oneTracks_exist(self):
         assert len(p.oneTracks)!=0
+     
         
         
     def test_midos_exist(self):
@@ -38,6 +43,14 @@ class TestOTEncoder(unittest.TestCase):
         
     def test_paths_exist(self):
         assert len(p.paths)!=0
+        
+        
+        
+        
+    def test_dminor(self):
+        mtd = MidiToDecimal("dminor")
+        mtd.encode()
+        print(mtd.encoded)
         
         
         
@@ -51,6 +64,7 @@ class TestOneHot(unittest.TestCase):
         oneHotEnc.encode(data)  
         
         assert len(oneHotEnc.xEncoded) != 0
+        
         assert len(oneHotEnc.yEncoded) != 0
         
         
@@ -62,7 +76,12 @@ class TestOneHot(unittest.TestCase):
             
             
         
-        
+class TestPathsToOneHot(unittest.TestCase):
+    parsedData = midi_encoder.pathsToOneHot(p, oneHotEnc)
+    assert len(parsedData)>0
+    
+    
+    
         
         
         

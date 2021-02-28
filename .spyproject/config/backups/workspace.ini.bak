@@ -6,5 +6,5 @@ save_non_project_files = False
 
 [main]
 version = 0.2.0
-recent_files = ['midi_parser\\parser.py', 'midi_parser\\helpers\\one_track_encoder.py', '..\\..\\anaconda3\\lib\\site-packages\\mido\\midifiles\\midifiles.py']
+recent_files = ['test\\test_midi_encoder.py', 'midi_parser\\parsers\\midi_encoder.py', 'midi_parser\\music_network\\serializer.py', 'test\\test_music_network.py']
 
