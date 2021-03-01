@@ -5,8 +5,9 @@ Created on Tue Feb 23 15:26:27 2021
 @author: noahs
 """
 
-from midi_parser.parsers.midi_encoder import MidiToDecimal, OneHotEncoder
-from midi_parser.parsers import midi_encoder
+from midi_parser.encoders import MidiToDecimal, OneHotEncoder
+from midi_parser import encoders
+
 
 import unittest
 
@@ -77,7 +78,7 @@ class TestOneHot(unittest.TestCase):
             
         
 class TestPathsToOneHot(unittest.TestCase):
-    parsedData = midi_encoder.pathsToOneHot(p, oneHotEnc)
+    parsedData = encoders.pathsToOneHot(p, oneHotEnc)
     assert len(parsedData)>0
     
     

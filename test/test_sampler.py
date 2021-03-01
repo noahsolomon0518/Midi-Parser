@@ -4,15 +4,12 @@ Created on Sat Feb 27 18:07:40 2021
 
 @author: noahs
 """
-from midi_parser.parsers.midi_encoder import MidiToDecimal, OneHotEncoder,pathsToOneHot
-from midi_parser.parsers import midi_encoder
-from midi_parser.music_network.serializer import MusicSampler, loadMusicSampler, dumpMusicSampler
-
-
+from midi_parser.encoders import MidiToDecimal, OneHotEncoder, pathsToOneHot
+from midi_parser.sampler import Sampler, loadSampler
+import tensorflow as tf
 import unittest
 from keras.layers import Dense, LSTM
 from keras.models import Sequential
-import tensorflow as tf
 
 
 maxLen, maxDim = 20, 200
@@ -43,21 +40,25 @@ class TestMusicNetwork(unittest.TestCase):
                 
                 
                 
-            self.ms = MusicSampler(mod, x)
+            self.ms = Sampler(mod, x)
             do = input("Generate music test? 1:Yes 0:No\n")
             if(do=="1"):
                 ms = self.ms
-                ms.generate(temp = 0.4)
-                ms.saveSampler("testing2")
+                ms.generate(temp = 0.4, nNotes = 100)
+                
+                name = input("Name: ")
+                self.name = name
+                ms.save(name)
             
 
     
     def test_load_sampler(self):
         do = input("Load Sampler? 1:Yes 0:No\n")
         if(do=="1"):    
-            ms = loadMusicSampler("testing2.smp")
-            ms.playPiece(0)
-            ms.getModel().summary()
+            name = input("which model"+"last model was "+ self.name)
+            ms = loadSampler(name)
+            ms.play(0)
+            ms.model.summary()
     
     
 

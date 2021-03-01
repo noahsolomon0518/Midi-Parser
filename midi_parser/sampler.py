@@ -3,7 +3,7 @@
 #Pass in a trained neural network along with one hot encoded starting samples
 #Uses sampling function to generate new music and plays it
 
-# !!!NOTE: When calling MusicSampler.saveSampler the path is relative
+# !!!NOTE: When calling Sampler.saveSampler the path is relative
 #          To the environment variable "MUSICSAMPLER"
 
 
@@ -17,7 +17,7 @@ import time
 import pickle
 from keras.models import load_model
 sf2 = os.path.abspath("C:/Users/noahs/Local Python Libraries/soundfonts/piano.sf2")
-
+smpPath = os.getenv("MUSICSAMPLER")
 
 '''
 ###
@@ -29,30 +29,29 @@ sf2 = os.path.abspath("C:/Users/noahs/Local Python Libraries/soundfonts/piano.sf
 
 
 
-#pickles up a PickledMusicSampler
-def dumpMusicSampler(filename, obj):
+#pickles up a CompressedSampler
+def saveSampler(filename, obj):
     assert ".smp" in filename
     if(os.path.isfile(filename)):
         raise FileExistsError
-    if(type(obj)!=PickledMusicSampler):
-        raise TypeError("object provided is not MusicSampler object. It is "+ str(type(obj)))
+    if(type(obj)!=CompressedSampler):
+        raise TypeError("object provided is not CompressedSampler object. It is "+ str(type(obj)))
     outfile = open(filename,'wb')
     pickle.dump(obj, outfile)
     outfile.close()
     
     
     
-#returns PickledMusicSampler from disk. INCLUDE .smp FILE EXTENTION!!
-def loadMusicSampler(filepath):
-    samplerPath = os.getenv('MUSICSAMPLER')
-    samplerFP = os.path.join(samplerPath, os.path.join("obj",filepath))
+#returns CompressedSampler from disk. INCLUDE .smp FILE EXTENTION!!
+def loadSampler(filepath):
+    samplerFP = os.path.join(smpPath, os.path.join("obj",filepath))
     infile = open(samplerFP,'rb')
     obj = pickle.load(infile)
     infile.close()
     
     
-    if(type(obj)!=PickledMusicSampler):
-        raise TypeError("filename provided is not MusicSampler object")
+    if(type(obj)!=CompressedSampler):
+        raise TypeError("filename provided is not CompressedSampler object")
     return obj
 
 #Mixes up probabilities of multinomial distribution (prediction of music neural network)
@@ -64,7 +63,9 @@ def sample(preds, temperature = 0.5):
     probs = np.random.multinomial(1,preds,1)
     return np.argmax(probs)
 
-
+def sample2(preds):
+    return choice(range(len(preds)))
+    
 
 #Takes one hot encoded vectors and converts them to their respective integers
 def encodeFromOneHot(generated):
@@ -84,6 +85,9 @@ def encodeFromOneHot(generated):
 ###
 '''
 
+
+
+#Data structure stored in MusicSampler and CompressedSampler 
 class GeneratedPiece:
     def __init__(self, piece, title):
         self.piece = piece
@@ -91,14 +95,17 @@ class GeneratedPiece:
 
 
 
+#Used for testing music generation capabilities of networks
+#Also can save as CompressedSampler (MusicSampler without some atrributes)
 
-class MusicSampler:
+class Sampler:
     
     def __init__(self, model, encodedSamples):
         self.model = model
         self.maxLen = len(encodedSamples[0])
         self.encodedSamples = encodedSamples
         self.generatedMusic = []
+    
         
         
     
@@ -108,7 +115,7 @@ class MusicSampler:
     
     #Generates in the form of one hot encoded vectors then converted to decimal
     #to be stored and played easily. 
-    def generate(self, temp, roundPredictions = True,nNotes = 500):
+    def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500):
         start =choice(self.encodedSamples)
         piece = []
         generated = start
@@ -116,7 +123,10 @@ class MusicSampler:
         for i in range(nNotes):
             priorNotes = np.expand_dims(generated[-self.maxLen:], axis = 0)
             preds = self.model.predict(priorNotes)
-            argmax = sample(preds[0], temp)
+            if(shouldSample):    
+                argmax = sample(preds[0], temp)
+            else:
+                argmax = np.argmax(preds[0])
             piece.append(argmax)
             if(roundPredictions):
                 preds = preds.astype('int')
@@ -124,7 +134,7 @@ class MusicSampler:
             print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
         
         
-        MusicSampler.playEncoded(piece)
+        Sampler.playEncoded(piece)
         print('1:SAVE PIECE \n2:GENERATE NEW PIECE \n3:ABORT')
         shouldSave = input("")
         if(shouldSave == "1"):
@@ -138,7 +148,7 @@ class MusicSampler:
         
             
         
-        
+    #Appends GeneratedPiece to self which will eventually be passed to CompressedSampler
     def _savePiece(self, piece):
         title = input("Pieces Title: ")
         self.generatedMusic.append(GeneratedPiece(piece, title))
@@ -164,17 +174,20 @@ class MusicSampler:
                 fs.noteoff(0, msg)
     
     
-    #folder relative to MUSICSAMPLER environment variable path/obj
-    def saveSampler(self, filepath):
-        samplerPath = os.getenv('MUSICSAMPLER')
-        samplerFP = join(samplerPath, relpath("obj/"+filepath+".smp"))
-        h5FP = join(samplerPath, relpath("h5/"+filepath+".h5"))
+    #folder relative to Sampler environment variable path/obj
+    def save(self, filepath):
+        samplerFP = join(smpPath, relpath("obj/"+filepath+".smp"))
+        h5FP = join(smpPath, relpath("h5/"+filepath+".h5"))
         self.model.save(h5FP)
         description = input("Description of Music: ")
-        pms = PickledMusicSampler(h5FP, self.generatedMusic, self.encodedSamples, description)
-        dumpMusicSampler(samplerFP, pms)
+        pms = CompressedSampler(h5FP, self.generatedMusic, self.encodedSamples, description)
+        saveSampler(samplerFP, pms)
         
-        
+    
+    
+    
+    
+    
         
     
 
@@ -182,30 +195,37 @@ class MusicSampler:
 
 
 
-        
-class PickledMusicSampler:
+#Can't figure out to pickle keras models so just recorded modelpath 
+class CompressedSampler:
     def __init__(self, modelPath, generatedMusic, trainingData,description):
         self.trainingData = trainingData
         self.modelPath = modelPath
         self.music = generatedMusic
         self.description = description
         
-    def iteratePieces(self):
+    def pieces(self):
         for i,piece in enumerate(self.music):
             print(i, "Title: "+ piece.title)
         
         
-    def playPiece(self, ind):
-        MusicSampler.playEncoded(self.music[ind].piece)
+    def play(self, ind):
+        Sampler.playEncoded(self.music[ind].piece)
         
-    def getModel(self):
+    @property
+    def model(self):
         return load_model(self.modelPath)
+    
+    #returns Sampler version of CompressedSampler
+    #This is mainly for generating new music easily with saved CompressedSampler
+    @property
+    def sampler(self):
+        return Sampler(self.getModel, self.trainingData)
         
 
     
 
-        
-        
+
+
 
 
 
