@@ -173,7 +173,9 @@ class MidiToDecimal:
         
         
     def _midosToOT(self):
-        for mido in self.midos:
+        nMidos = len(self.midos)
+        for i, mido in enumerate(self.midos):
+            print("Progress: "+ i)
             self.oneTracks.append(OneTrack(mido))
         print(self.oneTracks[0].notesAbs[0].note)
        

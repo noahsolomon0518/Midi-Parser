@@ -29,29 +29,29 @@ smpPath = os.getenv("MUSICSAMPLER")
 
 
 
-#pickles up a CompressedSampler
-def saveSampler(filename, obj):
+#pickles up a SmpFile
+def saveSmp(filename, obj):
     assert ".smp" in filename
     if(os.path.isfile(filename)):
         raise FileExistsError
-    if(type(obj)!=CompressedSampler):
-        raise TypeError("object provided is not CompressedSampler object. It is "+ str(type(obj)))
+    if(type(obj)!=SmpFile):
+        raise TypeError("object provided is not SmpFile object. It is "+ str(type(obj)))
     outfile = open(filename,'wb')
     pickle.dump(obj, outfile)
     outfile.close()
     
     
     
-#returns CompressedSampler from disk. INCLUDE .smp FILE EXTENTION!!
-def loadSampler(filepath):
+#returns SmpFile from disk. INCLUDE .smp FILE EXTENTION!!
+def loadSmp(filepath):
     samplerFP = os.path.join(smpPath, os.path.join("obj",filepath))
     infile = open(samplerFP,'rb')
     obj = pickle.load(infile)
     infile.close()
     
     
-    if(type(obj)!=CompressedSampler):
-        raise TypeError("filename provided is not CompressedSampler object")
+    if(type(obj)!=SmpFile):
+        raise TypeError("filename provided is not SmpFile object")
     return obj
 
 #Mixes up probabilities of multinomial distribution (prediction of music neural network)
@@ -87,7 +87,7 @@ def encodeFromOneHot(generated):
 
 
 
-#Data structure stored in MusicSampler and CompressedSampler 
+#Data structure stored in MusicSampler and SmpFile 
 class GeneratedPiece:
     def __init__(self, piece, title):
         self.piece = piece
@@ -95,16 +95,34 @@ class GeneratedPiece:
 
 
 
+
+#Can't figure out to pickle keras models so just recorded modelpath 
+#Description should include what data was used to train, how many epochs, and what the outcome was
+class SmpFile:
+    def __init__(self, modelPath, generated, description, title):
+        self.title = title
+        self.modelPath = modelPath
+        self.generated = generated 
+        self.description = description
+        
+    @property
+    def model(self):
+        return load_model(self.modelPath)
+
+
+
+
 #Used for testing music generation capabilities of networks
-#Also can save as CompressedSampler (MusicSampler without some atrributes)
+#Also can save as SmpFile (MusicSampler without some atrributes)
 
 class Sampler:
     
-    def __init__(self, model, encodedSamples):
+    def __init__(self, model, xTrain):
         self.model = model
-        self.maxLen = len(encodedSamples[0])
-        self.encodedSamples = encodedSamples
-        self.generatedMusic = []
+        self.maxLen = len(xTrain[0])
+        self.xTrain = xTrain
+        self.generated = []
+        self.cached = None
     
         
         
@@ -116,7 +134,7 @@ class Sampler:
     #Generates in the form of one hot encoded vectors then converted to decimal
     #to be stored and played easily. 
     def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500):
-        start =choice(self.encodedSamples)
+        start = choice(self.xTrain)
         piece = []
         generated = start
         print("---Generating Piece---")
@@ -135,23 +153,32 @@ class Sampler:
         
         
         Sampler.playEncoded(piece)
-        print('1:SAVE PIECE \n2:GENERATE NEW PIECE \n3:ABORT')
+        self.cached = piece
+        print('1:SAVE PIECE \n2:GENERATE NEW PIECE \n3:ABORT\n')
         shouldSave = input("")
         if(shouldSave == "1"):
-            self._savePiece(piece)
-            print("Piece saved... \n1:GENERATE NEW PIECE \n2:ABORT")
+            print("---Saving Piece---")
+            title = input("Piece title: ")
+            self._savePiece(piece, title)
+            print("Piece saved... \n1:GENERATE NEW PIECE \n2:ABORT \n")
             generateNew = input("")
             if(generateNew == "1"):
                 self.generate(temp, roundPredictions, nNotes)
         elif(shouldSave == "2"):
             self.generate(temp, roundPredictions, nNotes)
+    
+
+
+
+    #Used to save most recently generated piece. Useful for testing
+    def saveCached(self, title):
+        self._savePiece(self.cached, title)
+
         
-            
+    #Appends GeneratedPiece to self which will eventually be passed to SmpFile
+    def _savePiece(self, piece, title):
         
-    #Appends GeneratedPiece to self which will eventually be passed to CompressedSampler
-    def _savePiece(self, piece):
-        title = input("Pieces Title: ")
-        self.generatedMusic.append(GeneratedPiece(piece, title))
+        self.generated.append(GeneratedPiece(piece, title))
         
         
         
@@ -178,10 +205,12 @@ class Sampler:
     def save(self, filepath):
         samplerFP = join(smpPath, relpath("obj/"+filepath+".smp"))
         h5FP = join(smpPath, relpath("h5/"+filepath+".h5"))
+        print("---Saving generated music as SmpFile---")
         self.model.save(h5FP)
+        title = input("Title of AI: ")
         description = input("Description of Music: ")
-        pms = CompressedSampler(h5FP, self.generatedMusic, self.encodedSamples, description)
-        saveSampler(samplerFP, pms)
+        smp = SmpFile(h5FP, self.generated, description, title)
+        saveSmp(samplerFP, smp)
         
     
     
@@ -195,32 +224,8 @@ class Sampler:
 
 
 
-#Can't figure out to pickle keras models so just recorded modelpath 
-class CompressedSampler:
-    def __init__(self, modelPath, generatedMusic, trainingData,description):
-        self.trainingData = trainingData
-        self.modelPath = modelPath
-        self.music = generatedMusic
-        self.description = description
-        
-    def pieces(self):
-        for i,piece in enumerate(self.music):
-            print(i, "Title: "+ piece.title)
-        
-        
-    def play(self, ind):
-        Sampler.playEncoded(self.music[ind].piece)
-        
-    @property
-    def model(self):
-        return load_model(self.modelPath)
     
-    #returns Sampler version of CompressedSampler
-    #This is mainly for generating new music easily with saved CompressedSampler
-    @property
-    def sampler(self):
-        return Sampler(self.getModel, self.trainingData)
-        
+
 
     
 

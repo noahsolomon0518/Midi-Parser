@@ -10,7 +10,7 @@ Created on Sun Feb 28 14:41:20 2021
 
 from os.path import join
 from os import getenv, walk
-from .sampler import loadSampler
+from .sampler import loadSmp
 smpPath = getenv("MUSICSAMPLER")
 
 
@@ -18,7 +18,7 @@ smpPath = getenv("MUSICSAMPLER")
 #For each PickledMusicSampler shows all pieces
 def tree(path=""):
     directory = join(smpPath,path)
-    for (dirpath, dirnames, filenames) in walk(directory):
+    for (dirpath, _, filenames) in walk(directory):
         for file in filenames:
             if ".smp" in file:
                 info(join(dirpath, file))
@@ -27,7 +27,7 @@ def tree(path=""):
  
 #Provides information about a Sampler and the music that it has generated
 def info(path):
-    smp = loadSampler(path)
+    smp = loadSmp(path)
     print("\n")
     print("Path: "+ path)
     print("Music Description: " + smp.description)
