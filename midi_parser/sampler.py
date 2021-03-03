@@ -133,7 +133,7 @@ class Sampler:
     
     #Generates in the form of one hot encoded vectors then converted to decimal
     #to be stored and played easily. 
-    def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500):
+    def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500, prompt = True):
         start = choice(self.xTrain)
         piece = []
         generated = start
@@ -150,10 +150,21 @@ class Sampler:
                 preds = preds.astype('int')
             generated = np.concatenate([generated,preds])
             print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
+        print("Piece generated...")
         
-        
-        Sampler.playEncoded(piece)
         self.cached = piece
+        
+        if(prompt):
+            self._prompt(
+                piece = piece,
+                temp = temp, 
+                shouldSample = shouldSample,
+                roundPredictions = roundPredictions,
+                nNotes = nNotes)
+    
+
+    def _prompt(self, piece, **args):
+        Sampler.playEncoded(piece)
         print('1:SAVE PIECE \n2:GENERATE NEW PIECE \n3:ABORT\n')
         shouldSave = input("")
         if(shouldSave == "1"):
@@ -163,10 +174,10 @@ class Sampler:
             print("Piece saved... \n1:GENERATE NEW PIECE \n2:ABORT \n")
             generateNew = input("")
             if(generateNew == "1"):
-                self.generate(temp, roundPredictions, nNotes)
+                self.generate(**args)
         elif(shouldSave == "2"):
-            self.generate(temp, roundPredictions, nNotes)
-    
+            self.generate(**args)
+        
 
 
 

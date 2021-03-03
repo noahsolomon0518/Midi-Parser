@@ -5,7 +5,7 @@ Created on Sat Feb 27 18:07:40 2021
 @author: noahs
 """
 from midi_parser.encoders import MidiToDecimal, OneHotEncoder, pathsToOneHot
-from midi_parser.sampler import Sampler, loadSampler
+from midi_parser.sampler import Sampler, loadSmp
 import tensorflow as tf
 import unittest
 from keras.layers import Dense, LSTM
@@ -27,6 +27,7 @@ ohe = OneHotEncoder(maxLen,3,maxDim)
 class TestMusicNetwork(unittest.TestCase):
     
     def setUp(self):
+        self.name = ""
         do = input("build NN? 1:Yes 0:No\n")
         if(do=="1"):
             mod = None
@@ -56,8 +57,7 @@ class TestMusicNetwork(unittest.TestCase):
         do = input("Load Sampler? 1:Yes 0:No\n")
         if(do=="1"):    
             name = input("which model"+"last model was "+ self.name)
-            ms = loadSampler(name)
-            ms.play(0)
+            ms = loadSmp(name)
             ms.model.summary()
     
     

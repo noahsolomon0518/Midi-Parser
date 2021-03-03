@@ -60,8 +60,7 @@ def findMidis(folder, r = True):
 
 #Encompasses entire process of encoding for NN,  from getting midi paths to one hot encoding
 def pathsToOneHot(MidiToDecimal, OneHotEncoder):
-    MidiToDecimal.encode()
-    sequences = MidiToDecimal.encoded
+    sequences = MidiToDecimal.encode()
     OneHotEncoder.encode(sequences)
     return (OneHotEncoder.xEncoded, OneHotEncoder.yEncoded)
 
@@ -145,39 +144,51 @@ class OneTrack:
 class MidiToDecimal:
     
     
-    def __init__(self, folder, r = True, encodingMethod = 'normalizedOT'):
+    def __init__(self, folder, debug = False, r = True, encodingMethod = 'normalizedOT'):
         self.midos = []
         self.oneTracks = []
         self.encoded = []
         self.paths = []
         self.addFolders(folder, r = True)
         self.encodingMethod = encodingMethod
+        self.debug = debug
         
         
     def addFolders(self, folder , r =True):
         self.paths.extend(findMidis(folder, r))
         
     def encode(self):
-        self._pathsToMidos()
-        self._midosToOT()
-        self._OTEncode()
+        midos = self._pathsToMidos(self.paths)
+        oneTracks = self._midosToOT(midos)
+        return self._OTEncode(oneTracks)
         
        
         
        
-    def _pathsToMidos(self):
-        self.midos = parseToMidos(self.paths)
+    def _pathsToMidos(self,paths):
+        if(not self.debug):
+            return parseToMidos(paths)
+        self.midos = parseToMidos(paths)
+        return self.midos
         
-    def _OTEncode(self):
-        self.encoded = RoundedOTEncoder(self.oneTracks).encodedOTs
+    def _midosToOT(self, midos):
+        oneTracks = []
+        for mido in midos:
+            ot = OneTrack(mido)
+            if(ot.notesRel != []):
+                oneTracks.append(OneTrack(mido))
+        if(not self.debug):
+            return oneTracks
+        self.oneTracks = oneTracks
+        
+    def _OTEncode(self, oneTracks):
+        if(not self.debug):
+            return RoundedOTEncoder(oneTracks).encodedOTs
+        self.encoded = RoundedOTEncoder(oneTracks).encodedOTs
+        return self.encoded
         
         
-    def _midosToOT(self):
-        nMidos = len(self.midos)
-        for i, mido in enumerate(self.midos):
-            print("Progress: "+ i)
-            self.oneTracks.append(OneTrack(mido))
-        print(self.oneTracks[0].notesAbs[0].note)
+
        
             
 
@@ -206,9 +217,11 @@ class MidiToDecimal:
 
 
 #One hot encoder for recurrent neural networks
+
 class OneHotEncoder:
-    def __init__(self, sampleLength, gap, oneHotDimension):
+    def __init__(self, sequences, sampleLength, gap=None, oneHotDimension=200):
         self.sampleLength = sampleLength
+        self.sequences = sequences
         self.gap = gap
         self.oneHotDimension = oneHotDimension
         self.xEncoded = []
@@ -222,6 +235,28 @@ class OneHotEncoder:
         self.xEncoded = np.array(self.xEncoded)
         self.yEncoded = np.array(self.yEncoded)   
     
+    #randomly generated n samples
+    def generate(self, n):
+        x = np.zeros((n, self.sampleLength, self.oneHotDimension))
+        y = np.zeros((n, self.oneHotDimension))
+        for i in range(n):
+            pieceInd = np.random.randint(len(self.sequences))
+            piece = self.sequences[pieceInd]
+            start = np.random.randint(len(piece)- (self.sampleLength+1))
+            for j in range(self.sampleLength):
+                if(piece[start+j]>(self.oneHotDimension-1)):
+                    x[i][j][self.oneHotDimension-1] = 1
+                else:
+                    x[i][j][piece[start+j]] = 1
+            if(piece[start+self.sampleLength]>(self.oneHotDimension-1)):
+                y[i][self.oneHotDimension-1] = 1
+            else:
+                y[i][piece[start+self.sampleLength]] = 1
+        return (x,y)
+
+
+
+
     
     def oneHotEncodeSequence(self,sequence):
         nSamples = self.getNSamples(sequence)
@@ -292,8 +327,8 @@ class RoundedOTEncoder(OTEncoder):
         
         for note in OT.notesRel:
             encodedOT.extend(RoundedOTEncoder.encodeOneNote(note, OT.tpb, self.normalizationFactor))
-        
-        self.encodedOTs.append(encodedOT)
+        if(len(encodedOT)!=0):
+            self.encodedOTs.append(encodedOT)
         
 
 
@@ -328,3 +363,74 @@ class RoundedOTEncoder(OTEncoder):
 
         
         
+
+
+
+
+import keras
+import numpy as np
+
+
+class DataGen(keras.utils.Sequence):
+    
+
+    #samplersPerEpoch is multiplied against nNotes. Smaller fractions will result in less samplers per epoch
+    def __init__(self, xEncoded, batchSize=32, sequenceSize = 20, nClasses=300, samplesPerEpoch = 1/3):
+
+        self.xEncoded = xEncoded
+        self.batchSize = batchSize
+        self.nClasses = nClasses
+        self.sequenceSize = sequenceSize
+        self.samplesPerEpoch = samplesPerEpoch
+        self.length = int(np.sum([len(piece)-(self.sequenceSize+1) for piece in self.xEncoded]))
+
+
+    def __len__(self):
+        return self.length
+
+
+    def __getitem__(self, index):
+        #If batchsize<nPieces => choose batchsize pieces and sample from them 
+        #If batchsize>nPieces => sample from each piece batchsize//nPieces times then choose remainder peices to sample from
+        batchEncoded = []
+        nPieces = len(self.xEncoded)
+        for i in range(self.batchSize//nPieces):
+            for piece in self.xEncoded:
+                batchEncoded.append(self._randSequence(piece))
+
+        r = self.batchSize%nPieces
+        pieceInds = np.random.choice(range(nPieces), replace = False, size = r)
+        for ind in pieceInds:
+            batchEncoded.append(self._randSequence(self.xEncoded[ind]))
+
+        batchEncoded = np.array(batchEncoded)
+        X, y = self.__data_generation(batchEncoded)
+
+        return X, y
+
+
+    def _randSequence(self,piece):
+        start = np.random.randint(len(piece)-(self.sequenceSize+1))
+        
+        return piece[start:start+self.sequenceSize]
+
+
+    def __data_generation(self, xEncoded):
+        #one hot encode sequences
+        x = np.zeros((self.batchSize, self.sequenceSize, self.nClasses))
+        y = np.zeros((self.batchSize, self.nClasses))
+        for i,sequence in enumerate(xEncoded):
+            for n,val in enumerate(sequence[:-1]):
+                if(val>(self.nClasses-1)):
+                    x[i][n][self.nClasses-1] = 1
+                else:
+                    x[i][n][val] = 1
+
+            yVal = sequence[-1]
+            if(yVal>(self.nClasses-1)):
+                y[i][self.nClasses-1] = 1
+            else:
+                y[i][yVal] = 1
+
+        return (x,y)
+
