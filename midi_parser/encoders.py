@@ -227,6 +227,54 @@ class OneHotEncoder:
         self.xEncoded = []
         self.yEncoded = []
         
+    #randomly generated n samples
+    #Split into 2 functions
+    #   1. randInds ----> grabs n random starting notes in encoded
+    #   2. oneHotInds ----> oneHotEncodeds x and ys
+    def generate(self, n):
+        xSequences, ySequences = self._randInds(n)
+        x,y = OneHotEncoder.oneHotEncodeSequences(xSequences, ySequences, self.oneHotDimension)
+        return (x,y)
+
+    #Picks n random indices for starting points
+    def _randInds(self, n):
+        xSequences = []
+        ySequences = []
+        for i in range(n):
+            pieceInd = np.random.randint(len(self.sequences))
+            piece = self.sequences[pieceInd]
+            start = np.random.randint(len(piece)- (self.sampleLength+1))
+            end = start+self.sampleLength
+            xSequences.append(piece[start:end])
+            ySequences.append(piece[end])
+        return (xSequences,ySequences)
+
+
+    #oneHotEncode sequences that are already formats into n xSequences and n ySequences of dimension d
+    @staticmethod
+    def oneHotEncodeSequences(xSequences, ySequences, nClasses):
+        nSamples = len(xSequences)
+        sampleLength = len(xSequences[0])
+
+        x = np.zeros((nSamples, sampleLength, nClasses))
+        y = np.zeros((nSamples, nClasses))
+
+
+        for n, xSequence in enumerate(xSequences):
+            for i, note in enumerate(xSequence):
+                if(note>(nClasses-1)):
+                    x[n][i][nClasses-1] = 1
+                else:
+                    x[n][i][note] = 1
+            if(ySequences[n]>(nClasses-1)):
+                    y[n][nClasses-1] = 1
+            else:
+                y[n][ySequences[n]] = 1
+        return (x,y)
+
+
+
+    #Method takes up ALOT of ram when parsing over 20 midi tracks. USE WITH CAUTION!
     def encode(self, sequences):
         self.xEncoded = []
         self.yEncoded = []
@@ -235,29 +283,10 @@ class OneHotEncoder:
         self.xEncoded = np.array(self.xEncoded)
         self.yEncoded = np.array(self.yEncoded)   
     
-    #randomly generated n samples
-    def generate(self, n):
-        x = np.zeros((n, self.sampleLength, self.oneHotDimension))
-        y = np.zeros((n, self.oneHotDimension))
-        for i in range(n):
-            pieceInd = np.random.randint(len(self.sequences))
-            piece = self.sequences[pieceInd]
-            start = np.random.randint(len(piece)- (self.sampleLength+1))
-            for j in range(self.sampleLength):
-                if(piece[start+j]>(self.oneHotDimension-1)):
-                    x[i][j][self.oneHotDimension-1] = 1
-                else:
-                    x[i][j][piece[start+j]] = 1
-            if(piece[start+self.sampleLength]>(self.oneHotDimension-1)):
-                y[i][self.oneHotDimension-1] = 1
-            else:
-                y[i][piece[start+self.sampleLength]] = 1
-        return (x,y)
 
 
 
 
-    
     def oneHotEncodeSequence(self,sequence):
         nSamples = self.getNSamples(sequence)
         for i in range(nSamples):

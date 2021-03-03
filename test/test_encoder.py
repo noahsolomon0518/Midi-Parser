@@ -37,7 +37,7 @@ class TestOTEncoder(unittest.TestCase):
 
      
     def test_onehotgen(self):
-        res = oneHotEnc.generate(1000000)
+        res = oneHotEnc.generate(10000)
         print(res)
         
         
