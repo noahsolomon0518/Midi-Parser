@@ -5,7 +5,7 @@ Created on Tue Feb 23 15:26:27 2021
 @author: noahs
 """
 
-from midi_parser.encoders import MidiToDecimal, OneHotEncoder, DataGen
+from midi_parser.encoders import MidiToDecimal, OneHotEncodeAll, OneHotEncodeGen, DataGen, OneHotInfo 
 from midi_parser import encoders
 from keras.layers import Dense, LSTM
 from keras.models import Sequential
@@ -17,7 +17,8 @@ p = MidiToDecimal("data")
 
 
 
-oneHotEnc = OneHotEncoder(p.encode(), sampleLength = 20)
+oneHotEnc = OneHotEncodeAll()
+encodeGen = OneHotEncodeGen()
 
 class TestOTEncoder(unittest.TestCase):
     
@@ -37,9 +38,9 @@ class TestOTEncoder(unittest.TestCase):
 
      
     def test_onehotgen(self):
-        res = oneHotEnc.generate(10000)
-        print(res)
-        
+        res = oneHotEnc.encode(p.encode())
+        res2 = encodeGen.encode(p.encode(), 6000)
+        print("Number of samples that can be generated: " + str(OneHotInfo.nSamples(p.encode(), 30, 3)))
         
     def test_paths_exist(self):
         assert len(p.paths)!=0
