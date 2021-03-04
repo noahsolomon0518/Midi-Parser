@@ -15,7 +15,7 @@ import warnings
 from mido import MidiFile
 
 sf2 = os.path.abspath(
-    "C:/Users/noahs/Local Python Libraries/midi_parser/soundfonts/piano.sf2")
+    "C:/Users/noahs/Local Python Libraries/soundfonts/piano.sf2")
 
 '''
 ###
@@ -48,6 +48,7 @@ def findMidis(folder, r=True):
 
     for (dirpath, dirnames, filenames) in walk(folder):
         for file in filenames:
+            print(file)
             if ".mid" in file:
                 paths.append(path.join(dirpath, file))
         if not r:
@@ -88,14 +89,65 @@ class Note():
 
 # Dumbed down mido object with one track
 class OneTrack:
-    def __init__(self, mido):
+
+
+    halfStepsAboveC = {
+        "C":0,
+        "B#":0,
+        "Db":1,
+        "C#":1,
+        "D":2,
+        "Eb":3,
+        "D#":3,
+        "Fb":4,
+        "E":4,
+        "E#":5,
+        "F":5,
+        "F#":6,
+        "Gb":6,
+        "G":7,
+        "G#":8,
+        "Ab":8,
+        "A":9,
+        "A#":10,
+        "Bb":10,
+        "B":11
+    }
+
+
+    def __init__(self, mido, convertToC = True, scales = "both"):
         self.mido = mido
-        self.notes = []
+        self.convertToC = convertToC
+        self.scales = scales
+        self.key = None
         self.notesAbs = []
         self.notesRel = []
         self._extractNotesAbs()
-        self._convertToNotesRel()
-        self.tpb = mido.ticks_per_beat
+
+        #Only does full conversion if valid. Otherwise self.noteRel=[] and is not parsed
+        if(self._isValid()):
+            self.needKey = (self.convertToC == True or self.scales != "both")
+            self.halfStepsAboveC = OneTrack.halfStepsAboveC[self.key.replace("m", "")]
+            self.halfStepsBelowC = 14 - OneTrack.halfStepsAboveC[self.key.replace("m", "")]
+            self._convertToNotesRel()
+            self.tpb = mido.ticks_per_beat
+
+
+    def _isValid(self):
+        if(self.key==None and (self.convertToC == True or self.scales != "both")):
+            return False
+        if(self.scales=="major" and "m" in self.key):
+            return False
+        if(self.scales=="minor" and "m" not in self.key):
+            return False
+        return True
+
+
+
+
+    
+
+
 
     def _extractNotesAbs(self):
 
@@ -103,7 +155,10 @@ class OneTrack:
             _time = 0
             for msg in track:
                 _time += msg.time
-
+                
+                if(msg.type == "key_signature"):
+                    self.key = msg.key
+                   
                 if(msg.type == "note_on" or msg.type == "note_off"):
                     self.notesAbs.append(Note(msg.note,
                                               _time,
@@ -123,20 +178,41 @@ class OneTrack:
             previousNote = notesAbs[i]
             deltaTime = currentNote.time - previousNote.time
             currentNoteCopy = currentNote.copy()
+            if(self.convertToC):
+                currentNoteCopy.note = self.convertNoteToC(currentNoteCopy.note) 
             currentNoteCopy.time = deltaTime
             self.notesRel.append(currentNoteCopy)
 
 
+
+
+    
+    def convertNoteToC(self, note):
+        newNote = note - self.halfStepsBelowC
+        if((note>87 and newNote<88) or newNote<0):
+            newNote = note + self.halfStepsAboveC
+        return newNote
+"""
+--Parameters--
+folder: Folder to get midis
+debug: Whether or not all data should be stored in memory to allow easier debugging. DO NOT USE WHEN PARSING A LOT OF MIDIS
+r: If true, recursively find all midis in a folder
+convertToC: Convert keys of midis to C. As a result midis without keys will not be parsed
+scales: Whether to accept major, minor, or both scales. Only used if convertToC is True. Options are "both", "major", "minor"
+
+
+"""
 # Main class to be used. Takes in directory and parses all midis to encoded sequences
 class MidiToDecimal:
 
-    def __init__(self, folder, debug=False, r=True, encodingMethod='normalizedOT'):
+    def __init__(self, folder, debug=False, r=True, convertToC = True,  scales = "both"):
+        self.convertToC = convertToC
+        self.scales = scales
         self.midos = []
         self.oneTracks = []
         self.encoded = []
         self.paths = []
         self.addFolders(folder, r=True)
-        self.encodingMethod = encodingMethod
         self.debug = debug
 
     def addFolders(self, folder, r=True):
@@ -145,7 +221,10 @@ class MidiToDecimal:
     def encode(self):
         midos = self._pathsToMidos(self.paths)
         oneTracks = self._midosToOT(midos)
-        return self._OTEncode(oneTracks)
+        encoded = self._OTEncode(oneTracks)
+        if(len(encoded)==0):
+            warnings.warn("No valid midis")
+        return encoded
 
     def _pathsToMidos(self, paths):
         if(not self.debug):
@@ -156,9 +235,9 @@ class MidiToDecimal:
     def _midosToOT(self, midos):
         oneTracks = []
         for mido in midos:
-            ot = OneTrack(mido)
+            ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales)
             if(ot.notesRel != []):
-                oneTracks.append(OneTrack(mido))
+                oneTracks.append(ot)
         if(not self.debug):
             return oneTracks
         self.oneTracks = oneTracks
@@ -169,12 +248,13 @@ class MidiToDecimal:
         self.encoded = RoundedOTEncoder(oneTracks).encodedOTs
         return self.encoded
 
-    def playEncoded(self, ind):
+    @staticmethod
+    def play(piece):
         fs = fluidsynth.Synth()
         fs.start()
         sfid = fs.sfload(sf2)
         fs.program_select(0, sfid, 0, 0)
-        for msg in self.encoded[ind]:
+        for msg in piece:
             if(msg >= 176):
                 time.sleep((msg-175)*0.03)
             elif(msg > 88):
@@ -242,61 +322,3 @@ class RoundedOTEncoder(OTEncoder):
             return waitTime
 
 
-class DataGen(keras.utils.Sequence):
-
-    # samplersPerEpoch is multiplied against nNotes. Smaller fractions will result in less samplers per epoch
-    def __init__(self, xEncoded, batchSize=32, sequenceSize=20, nClasses=300, samplesPerEpoch=1/3):
-
-        self.xEncoded = xEncoded
-        self.batchSize = batchSize
-        self.nClasses = nClasses
-        self.sequenceSize = sequenceSize
-        self.samplesPerEpoch = samplesPerEpoch
-        self.length = int(
-            np.sum([len(piece)-(self.sequenceSize+1) for piece in self.xEncoded]))
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, index):
-        # If batchsize<nPieces => choose batchsize pieces and sample from them
-        # If batchsize>nPieces => sample from each piece batchsize//nPieces times then choose remainder peices to sample from
-        batchEncoded = []
-        nPieces = len(self.xEncoded)
-        for i in range(self.batchSize//nPieces):
-            for piece in self.xEncoded:
-                batchEncoded.append(self._randSequence(piece))
-
-        r = self.batchSize % nPieces
-        pieceInds = np.random.choice(range(nPieces), replace=False, size=r)
-        for ind in pieceInds:
-            batchEncoded.append(self._randSequence(self.xEncoded[ind]))
-
-        batchEncoded = np.array(batchEncoded)
-        X, y = self.__data_generation(batchEncoded)
-
-        return X, y
-
-    def _randSequence(self, piece):
-        start = np.random.randint(len(piece)-(self.sequenceSize+1))
-
-        return piece[start:start+self.sequenceSize]
-
-    def __data_generation(self, xEncoded):
-        # one hot encode sequences
-        x = np.zeros((self.batchSize, self.sequenceSize, self.nClasses))
-        y = np.zeros((self.batchSize, self.nClasses))
-        for i, sequence in enumerate(xEncoded):
-            for n, val in enumerate(sequence[:-1]):
-                if(val > (self.nClasses-1)):
-                    x[i][n][self.nClasses-1] = 1
-                else:
-                    x[i][n][val] = 1
-
-            yVal = sequence[-1]
-            if(yVal > (self.nClasses-1)):
-                y[i][self.nClasses-1] = 1
-            else:
-                y[i][yVal] = 1
-
-        return (x, y)

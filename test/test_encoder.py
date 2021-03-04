@@ -5,7 +5,7 @@ Created on Tue Feb 23 15:26:27 2021
 @author: noahs
 """
 
-from midi_parser.encoders import MidiToDecimal, OneHotEncodeAll, OneHotEncodeGen, DataGen, OneHotInfo 
+from midi_parser.encoders import MidiToDecimal
 from midi_parser import encoders
 from keras.layers import Dense, LSTM
 from keras.models import Sequential
@@ -13,12 +13,11 @@ maxLen, maxDim = 20, 300
 import tensorflow as tf
 import unittest
 
-p = MidiToDecimal("data")
+p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset", scales="major")
+data = p.encode()
+print(data)
 
 
-
-oneHotEnc = OneHotEncodeAll()
-encodeGen = OneHotEncodeGen()
 
 class TestOTEncoder(unittest.TestCase):
     
@@ -38,9 +37,7 @@ class TestOTEncoder(unittest.TestCase):
 
      
     def test_onehotgen(self):
-        res = oneHotEnc.encode(p.encode())
-        res2 = encodeGen.encode(p.encode(), 6000)
-        print("Number of samples that can be generated: " + str(OneHotInfo.nSamples(p.encode(), 30, 3)))
+        p.encode()
         
     def test_paths_exist(self):
         assert len(p.paths)!=0
@@ -48,8 +45,9 @@ class TestOTEncoder(unittest.TestCase):
         
         
         
-    def test_dminor(self):
-        mtd = MidiToDecimal("data")
+    def test_play(self):
+        
+        MidiToDecimal.play(data[2])
       
         
         

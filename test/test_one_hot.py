@@ -2,9 +2,9 @@ from midi_parser.one_hot import OneHotEncodeAll, OneHotEncodeGen,  OneHotInfo
 from midi_parser.encoders import MidiToDecimal
 import unittest
 
-p = MidiToDecimal("data")
+p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s")
 data = p.encode()
-
+print(data)
 
 oneHotEnc = OneHotEncodeAll()
 encodeGen = OneHotEncodeGen()
