@@ -48,7 +48,6 @@ def findMidis(folder, r=True):
 
     for (dirpath, dirnames, filenames) in walk(folder):
         for file in filenames:
-            print(file)
             if ".mid" in file:
                 paths.append(path.join(dirpath, file))
         if not r:
@@ -73,7 +72,7 @@ def pathsToOneHot(MidiToDecimal, OneHotEncoder):
 
 
 # OneTrack object uses Note to simplify midi representation
-class Note():
+class Note:
     def __init__(self, note, time, type, velocity):
         self.note = note
         self.time = time
@@ -87,9 +86,43 @@ class Note():
         return Note(self.note, self.time, self.type, self.velocity)
 
 
-# Dumbed down mido object with one track
+
+
+
+
+
 class OneTrack:
 
+    def __init__(self, mido, convertToC = True, scales = "both"):
+        self.mido = mido
+        self.convertToC = convertToC
+        self.scales = scales
+        self.key = None
+        self.tpb = mido.ticks_per_beat
+        self.notesAbs = []
+        self.notesRel = []
+        self._extractNotesAbs()
+
+    
+
+
+        #Only does full conversion if valid. Otherwise self.noteRel=[] and is not parsed
+        if(self._isValid()):
+            self.needKey = (self.convertToC == True or self.scales != "both")
+            self.halfStepsAboveC = OneTrack.halfStepsAboveC[self.key.replace("m", "")]
+            self.halfStepsBelowC = 14 - OneTrack.halfStepsAboveC[self.key.replace("m", "")]
+            self._convertToNotesRel()
+
+    
+
+    def _isValid(self):
+        if(self.key==None and (self.convertToC == True or self.scales != "both")):
+            return False
+        if(self.scales=="major" and "m" in self.key):
+            return False
+        if(self.scales=="minor" and "m" not in self.key):
+            return False
+        return True
 
     halfStepsAboveC = {
         "C":0,
@@ -115,51 +148,17 @@ class OneTrack:
     }
 
 
-    def __init__(self, mido, convertToC = True, scales = "both"):
-        self.mido = mido
-        self.convertToC = convertToC
-        self.scales = scales
-        self.key = None
-        self.notesAbs = []
-        self.notesRel = []
-        self._extractNotesAbs()
-
-        #Only does full conversion if valid. Otherwise self.noteRel=[] and is not parsed
-        if(self._isValid()):
-            self.needKey = (self.convertToC == True or self.scales != "both")
-            self.halfStepsAboveC = OneTrack.halfStepsAboveC[self.key.replace("m", "")]
-            self.halfStepsBelowC = 14 - OneTrack.halfStepsAboveC[self.key.replace("m", "")]
-            self._convertToNotesRel()
-            self.tpb = mido.ticks_per_beat
-
-
-    def _isValid(self):
-        if(self.key==None and (self.convertToC == True or self.scales != "both")):
-            return False
-        if(self.scales=="major" and "m" in self.key):
-            return False
-        if(self.scales=="minor" and "m" not in self.key):
-            return False
-        return True
-
-
-
-
-    
-
-
 
     def _extractNotesAbs(self):
 
         for track in self.mido.tracks:
             _time = 0
             for msg in track:
-                _time += msg.time
-                
                 if(msg.type == "key_signature"):
                     self.key = msg.key
                    
                 if(msg.type == "note_on" or msg.type == "note_off"):
+                    _time += msg.time
                     self.notesAbs.append(Note(msg.note,
                                               _time,
                                               msg.type,
@@ -167,6 +166,8 @@ class OneTrack:
 
         self.notesAbs.sort(key=lambda x: x.time)
 
+
+    #mode can either be "on-off" or "on".  If "on-off" sees note off as distinct note. Other wise records time relative to how long note played
     def _convertToNotesRel(self):
         notesAbs = self.notesAbs.copy()
         firstNote = notesAbs[0]
@@ -177,6 +178,7 @@ class OneTrack:
             currentNote = notesAbs[i+1]
             previousNote = notesAbs[i]
             deltaTime = currentNote.time - previousNote.time
+            
             currentNoteCopy = currentNote.copy()
             if(self.convertToC):
                 currentNoteCopy.note = self.convertNoteToC(currentNoteCopy.note) 
@@ -184,14 +186,57 @@ class OneTrack:
             self.notesRel.append(currentNoteCopy)
 
 
-
-
-    
     def convertNoteToC(self, note):
         newNote = note - self.halfStepsBelowC
         if((note>87 and newNote<88) or newNote<0):
             newNote = note + self.halfStepsAboveC
         return newNote
+
+#Calculates time between each note and encodes it.
+class OneTrackOnOnly(OneTrack):
+
+
+
+
+    def __init__(self, mido, convertToC = True, scales = "both"):
+        super().__init__(mido, convertToC = True, scales = "both")
+        self.notesTimed = []
+        self._calculateNoteOns()
+
+    def _calculateNoteOns(self):
+        for i, note in enumerate(self.notesRel):
+            if(note.time>0):
+                self.notesTimed.append(Note(88, note.time, "time_unit", 80))
+            if(note.type == "note_on"):
+                
+                noteNum = note.note
+                dt = 0
+                for nextNote in self.notesRel[i:]:
+                    if(nextNote.type == "note_off" and nextNote.note == noteNum):
+                        break
+                    dt+=nextNote.time 
+                self.notesTimed.append(Note(note.note, dt, "note_on", 80))
+                
+                
+
+
+
+
+
+    
+
+
+
+
+
+    
+
+
+
+
+
+
+    
 """
 --Parameters--
 folder: Folder to get midis
@@ -205,10 +250,11 @@ scales: Whether to accept major, minor, or both scales. Only used if convertToC 
 # Main class to be used. Takes in directory and parses all midis to encoded sequences
 class MidiToDecimal:
 
-    def __init__(self, folder, debug=False, r=True, convertToC = True,  scales = "both"):
+    def __init__(self, folder, debug=False, r=True, convertToC = True,  scales = "both", method = "on_and_off"):
         self.convertToC = convertToC
         self.scales = scales
         self.midos = []
+        self.method = method
         self.oneTracks = []
         self.encoded = []
         self.paths = []
@@ -225,6 +271,7 @@ class MidiToDecimal:
         if(len(encoded)==0):
             warnings.warn("No valid midis")
         return encoded
+        
 
     def _pathsToMidos(self, paths):
         if(not self.debug):
@@ -235,18 +282,32 @@ class MidiToDecimal:
     def _midosToOT(self, midos):
         oneTracks = []
         for mido in midos:
-            ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales)
-            if(ot.notesRel != []):
+            if(self.method == "on_and_off"):
+                ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales)
+            elif(self.method == "on_only"):
+                ot = OneTrackOnOnly(mido, convertToC=self.convertToC, scales=self.scales)
+            if(ot.notesRel != [] and ot != None):
                 oneTracks.append(ot)
+
+
         if(not self.debug):
             return oneTracks
         self.oneTracks = oneTracks
+        return oneTracks
+
+
 
     def _OTEncode(self, oneTracks):
+        if(self.method == "on_and_off"):
+            OTEncoded = RoundedOTEncoder(oneTracks).encodedOTs
+        elif(self.method == "on_only"):
+            OTEncoded = OTEncoderOnOnly(oneTracks).encodedOTs
         if(not self.debug):
-            return RoundedOTEncoder(oneTracks).encodedOTs
-        self.encoded = RoundedOTEncoder(oneTracks).encodedOTs
-        return self.encoded
+            return OTEncoded
+        self.encoded = OTEncoded
+        return OTEncoded
+
+    
 
     @staticmethod
     def play(piece):
@@ -277,10 +338,10 @@ class OTEncoder:
         for OT in OTs:
             func(OT)
 
-
+#timeDims are the amount of distinct numbers can represent timing...
 class RoundedOTEncoder(OTEncoder):
 
-    def __init__(self, oneTracks, normalizationFactor=16):
+    def __init__(self, oneTracks, normalizationFactor=16, timeDims = 0):
 
         self.normalizationFactor = normalizationFactor
         super().__init__()
@@ -295,6 +356,10 @@ class RoundedOTEncoder(OTEncoder):
         if(len(encodedOT) != 0):
             self.encodedOTs.append(encodedOT)
 
+
+    #tpb/normFactor is the smallest unit of time. For example if normFact = 16 and tpb=64 aka 1 quarter note = 64 ticks
+    #The smallest unit of time is a 1/16 of a quarter note. In this case 4 ticks would equal one of these units or a 64th note
+    #Which is veryyyyyyy small
     @staticmethod
     def encodeOneNote(note, tpb, normalizationFactor):
 
@@ -320,5 +385,49 @@ class RoundedOTEncoder(OTEncoder):
         else:
             waitTime.append(note.note)
             return waitTime
+
+
+
+class OTEncoderOnOnly(OTEncoder):
+    def __init__(self, oneTracks, normalizationFactor = 16, extend = True):
+        self.normalizationFactor = normalizationFactor
+        super().__init__()
+        super().encodeAllOT(oneTracks, self.encodeOneMido)
+
+
+    def encodeOneMido(self, OT):
+        encodedOT = []
+
+        for note in OT.notesTimed:
+    
+            encodedNote = self.encodeOneNote(note, OT.tpb)
+            if(encodedNote!=None):
+                encodedOT.extend(encodedNote)
+        if(len(encodedOT) != 0):
+            self.encodedOTs.append(encodedOT)
+        
+    
+
+    def encodeOneNote(self, note, tpb):
+
+        norm = tpb/self.normalizationFactor
+        normalizedDT = note.time/norm
+        if(normalizedDT >= 0.5):
+            normalizedDT = round(normalizedDT)
+        elif(normalizedDT > 0):
+            normalizedDT = 1
+        else:
+            normalizedDT = 0
+        if(normalizedDT == 0):
+            return None
+        elif(note.type == "note_on"):
+            return [note.note, normalizedDT]
+        else:
+  
+            return [88, normalizedDT]
+
+
+    
+
 
 

@@ -7,7 +7,7 @@
 #          To the environment variable "MUSICSAMPLER"
 
 
-
+import asyncio
 import os
 from os.path import join, relpath
 import numpy as np
@@ -18,6 +18,11 @@ import pickle
 from keras.models import load_model
 sf2 = os.path.abspath("C:/Users/noahs/Local Python Libraries/soundfonts/piano.sf2")
 smpPath = os.getenv("MUSICSAMPLER")
+fs = fluidsynth.Synth()
+fs.start()
+sfid = fs.sfload(sf2)
+fs.program_select(0, sfid, 0, 0)
+
 
 '''
 ###
@@ -26,6 +31,11 @@ smpPath = os.getenv("MUSICSAMPLER")
 
 ###
 '''
+async def playnote(note, _time):
+    fs.noteon(0, note, 80)
+    await asyncio.sleep(_time*0.03)
+    fs.noteoff(0, note)
+
 
 
 
@@ -198,18 +208,55 @@ class Sampler:
     
     #Play a decimal encoded piece using roundedEncoding (If I decide to make more encoding methods)
     @staticmethod
-    def playEncoded(piece):
+    def playEncoded(piece, timeunit = 0.03):
+
+        if(max([piece[i] for i in range(len(piece)) if i%2==0]) < 176):
+            piece = Sampler.convertToOnOff(piece)
         fs = fluidsynth.Synth()
         fs.start()
         sfid = fs.sfload(sf2)
         fs.program_select(0, sfid, 0, 0)
         for msg in piece:
             if(msg>=176):
-                time.sleep((msg-175)*0.03)
+                time.sleep((msg-175)*timeunit)
             elif(msg>88):
                 fs.noteon(0, msg-88, 100)
             else:
                 fs.noteoff(0, msg)
+
+
+    @staticmethod
+    def convertToOnOff(piece):
+
+        convertedPiece = []
+        #Count total time units
+        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+1000
+        notesByTimeUnit = [[] for i in range(totalTimeUnits)]
+
+        currentTimeUnit = 0
+        for i,evt in enumerate(piece):
+
+            if(i%2 == 0):
+                if(evt==88):
+                    currentTimeUnit += piece[i+1]
+
+                else:
+                    notesByTimeUnit[currentTimeUnit].append(88+evt)
+                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
+            
+        for timeUnit in notesByTimeUnit:
+            if(len(timeUnit)==0 and len(convertedPiece)>0):
+                convertedPiece[-1]+=1
+            else:
+                for note in timeUnit:
+                    convertedPiece.append(note)
+                convertedPiece.append(176)    #Each timeunit represents 176
+        #print(notesByTimeUnit)
+        return convertedPiece
+        
+
+
+
     
     
     #folder relative to Sampler environment variable path/obj

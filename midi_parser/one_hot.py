@@ -3,7 +3,18 @@ import warnings
 import keras
 
 
+
+
+
 class OneHotInfo:
+
+    @staticmethod
+    def oneHotToDeci(sequence):
+        encoded = []
+        for note in sequence:
+            encoded.append(np.argmax(note))
+        return encoded
+
     
     #Provides every decimal encoded value and its number of occurences in sequences
     @staticmethod
@@ -31,7 +42,7 @@ class OneHotInfo:
 
 
 class OneHotEncoder:
-    def __init__(self, lookback=30, nClasses=200):
+    def __init__(self, lookback, nClasses):
         self.lookback = lookback
         self.nClasses = nClasses
     
