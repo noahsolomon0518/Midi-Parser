@@ -157,8 +157,8 @@ class OneTrack:
                 if(msg.type == "key_signature"):
                     self.key = msg.key
                    
-                if(msg.type == "note_on" or msg.type == "note_off"):
-                    _time += msg.time
+                _time += msg.time
+                if(msg.type in ["note_on","note_off"]):
                     self.notesAbs.append(Note(msg.note,
                                               _time,
                                               msg.type,
@@ -194,9 +194,6 @@ class OneTrack:
 
 #Calculates time between each note and encodes it.
 class OneTrackOnOnly(OneTrack):
-
-
-
 
     def __init__(self, mido, convertToC = True, scales = "both"):
         super().__init__(mido, convertToC = True, scales = "both")
@@ -284,7 +281,7 @@ class MidiToDecimal:
         for mido in midos:
             if(self.method == "on_and_off"):
                 ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales)
-            elif(self.method == "on_only"):
+            elif(self.method in ["on_only", "multi_network"]):
                 ot = OneTrackOnOnly(mido, convertToC=self.convertToC, scales=self.scales)
             if(ot.notesRel != [] and ot != None):
                 oneTracks.append(ot)
@@ -299,7 +296,9 @@ class MidiToDecimal:
 
     def _OTEncode(self, oneTracks):
         if(self.method == "on_and_off"):
-            OTEncoded = RoundedOTEncoder(oneTracks).encodedOTs
+            OTEncoded = OTEncoderOnOff(oneTracks).encodedOTs
+        elif(self.method == "multi_network"):
+            OTEncoded = OTEncoderMultiNet(oneTracks).encodedOTs
         elif(self.method == "on_only"):
             OTEncoded = OTEncoderOnOnly(oneTracks).encodedOTs
         if(not self.debug):
@@ -339,7 +338,7 @@ class OTEncoder:
             func(OT)
 
 #timeDims are the amount of distinct numbers can represent timing...
-class RoundedOTEncoder(OTEncoder):
+class OTEncoderOnOff(OTEncoder):
 
     def __init__(self, oneTracks, normalizationFactor=16, timeDims = 0):
 
@@ -351,7 +350,7 @@ class RoundedOTEncoder(OTEncoder):
         encodedOT = []
 
         for note in OT.notesRel:
-            encodedOT.extend(RoundedOTEncoder.encodeOneNote(
+            encodedOT.extend(OTEncoderOnOff.encodeOneNote(
                 note, OT.tpb, self.normalizationFactor))
         if(len(encodedOT) != 0):
             self.encodedOTs.append(encodedOT)
@@ -419,7 +418,7 @@ class OTEncoderOnOnly(OTEncoder):
         else:
             normalizedDT = 0
         if(normalizedDT == 0):
-            return None
+            return [note.note, None]
         elif(note.type == "note_on"):
             return [note.note, normalizedDT]
         else:
@@ -427,7 +426,25 @@ class OTEncoderOnOnly(OTEncoder):
             return [88, normalizedDT]
 
 
+
+#Each piece consist of two list 1.note list 2.time list
+class OTEncoderMultiNet(OTEncoderOnOnly):
+    def __init__(self, oneTracks, normalizationFactor = 16):
+        self.normalizationFactor = normalizationFactor
+        super().__init__(oneTracks)
+
     
-
-
+    def encodeOneMido(self, OT):
+        encodedNotes = []
+        encodedTimes = []
+        for note in OT.notesTimed:
+    
+            encodedNote, encodedTime = self.encodeOneNote(note, OT.tpb)
+            if(encodedNote!=None and encodedTime!=None):
+                encodedNotes.append(encodedNote)
+                encodedTimes.append(encodedTime)
+            
+        if(len(encodedNotes) != 0):
+            self.encodedOTs.append([encodedNotes, encodedTimes])
+        
 

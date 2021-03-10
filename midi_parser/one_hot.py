@@ -100,9 +100,10 @@ class OneHotEncodeAll(OneHotEncoder):
 
 #startThresh ---> There must be atleast startthresh starting points in a piece to sample from it. Only super necessary for small midis
 class OneHotEncodeGen(OneHotEncoder):
-    def __init__(self, lookback=30, nClasses=200, startThresh = 20):
+    def __init__(self, lookback=30, nClasses=200, startThresh = 20, evenInds = False):
         super().__init__(lookback=lookback, nClasses=nClasses)
         self.startThresh = startThresh
+        self.evenInds = evenInds
         
     #   1. randInds ----> grabs n random starting notes in encoded
     def encode(self, sequences, n):
@@ -120,13 +121,75 @@ class OneHotEncodeGen(OneHotEncoder):
         for i in range(n):
             pieceInd = np.random.randint(len(sequences))
             piece = sequences[pieceInd]
-            startRange = (len(piece) - (self.lookback+1))
-            if(startRange>self.startThresh):
-                start = np.random.randint(startRange)
+            if(self.evenInds):
+                startRange = [2*i for i in range((len(piece) - (self.lookback+1))//2)]
+            else:
+                startRange = range(len(piece) - (self.lookback+1))
+            if(len(startRange)>self.startThresh):
+                start = np.random.choice(startRange)
+                
                 end = start+self.lookback
                 xSequences.append(piece[start:end])
                 ySequences.append(piece[end])
         return (xSequences, ySequences)
+
+
+
+
+#Generates one hot encoded samples in form of multinet
+class OneHotEncodeMultiNet(OneHotEncoder):
+    def __init__(self, lookback=30, nClasses=200, startThresh = 20, nClassesNotes = 89, nClassesTimes = 100):
+        super().__init__(lookback=lookback, nClasses=nClassesTimes + nClassesNotes)
+        self.startThresh = startThresh
+        self.nClassesNotes = nClassesNotes
+        self.nClassesTimes = nClassesTimes
+
+
+
+
+    def encode(self, sequences, n):
+        xNotes,yNotes, xTimes,yTimes = self._randInds(sequences, n)
+        return self.oneHotEncode(xNotes,yNotes, xTimes,yTimes)
+
+    def _randInds(self, sequences, n):
+        xNotes = []
+        yNotes = []
+        xTimes = []
+        yTimes = []
+        for i in range(n):
+            pieceInd = np.random.randint(len(sequences[0]))
+            pieceNotes = sequences[pieceInd][0]
+            pieceTimes = sequences[pieceInd][1]
+            assert len(pieceNotes)==len(pieceTimes)
+            startRange = range(len(pieceNotes) - (self.lookback+1))
+            if(len(startRange)>self.startThresh):
+                start = np.random.choice(startRange)
+                end = start+self.lookback
+                xNotes.append(pieceNotes[start:end])
+                yNotes.append(pieceNotes[end])
+                xTimes.append(pieceTimes[start:end])
+                yTimes.append(pieceTimes[end])
+        return xNotes,yNotes, xTimes,yTimes
+
+
+    def oneHotEncode(self, xNotes,yNotes, xTimes,yTimes):
+        nSamples = len(xNotes)
+        lookback = len(xNotes[0])
+        nClasses = self.nClasses
+        x = np.zeros((nSamples, lookback, nClasses))
+        yNotesOH = np.zeros((nSamples, self.nClassesNotes))
+        yTimesOH = np.zeros((nSamples, self.nClassesTimes))
+        for i in range(nSamples):
+            for j, note in enumerate(xNotes[i]):
+                x[i][j][note] = 1
+            yNotesOH[i][yNotes[i]] = 1
+            for j, time in enumerate(xTimes[i]):
+                x[i][j][time+self.nClassesNotes] = 1
+            yTimesOH[i][yTimes[i]] = 1
+        return x,yNotesOH,yTimesOH
+
+
+
 
 
 

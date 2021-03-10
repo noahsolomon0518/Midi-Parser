@@ -17,8 +17,8 @@ import unittest
 
 
 
-p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset", scales="major")
-data = p.encode()
+encoder = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/Classical Archives - The Greats (MIDI)/Bach/Bwv001- 400 Chorales", method = "on_and_off", debug = True)
+data = encoder.encode()
 
 
 
@@ -40,20 +40,34 @@ class TestOTEncoder(unittest.TestCase):
     '''
 
      
-    def test_onehotgen(self):
-        p.encode()
+
         
-    def test_paths_exist(self):
-        assert len(p.paths)!=0
+    def test_vars_empty(self):
+        self.assertTrue(len(encoder.paths)!=0)
+        self.assertTrue(len(encoder.midos)!=0)
+        self.assertTrue(len(encoder.oneTracks)!=0)
+        self.assertTrue(len(encoder.encoded)!=0)
         
         
     def test_on_only(self):
+        pass
         #ohe = OneHotEncodeGen(nClasses=89)
 
-        onOnly = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/Classical Archives - The Greats (MIDI)/Bach/Bwv001- 400 Chorales", method = "on_only", debug = True)
-        encoded = onOnly.encode()
+        ##onOnly = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/Classical Archives - The Greats (MIDI)/Bach/Bwv001- 400 Chorales", method = "on_only", debug = True)
+        #encoded = onOnly.encode()
         #(x,y) = ohe.encode(encoded, 100)
-        Sampler.playEncoded(encoded[0], 0.03)
+        #Sampler.playEncoded(encoded[0], 0.03)
+
+
+    def test_absolute_notes(self):
+        pass
+        #print([note.note for note in encoder.oneTracks[0].notesRel])
+        #Sampler.playEncoded(encoder.encoded[1])
+
+
+    def test_OT_encoder_multi_net(self):
+        encoder = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/Classical Archives - The Greats (MIDI)/Bach/Bwv001- 400 Chorales", method = "multi_network", debug = True)
+        print(encoder.encode())
 
 
         

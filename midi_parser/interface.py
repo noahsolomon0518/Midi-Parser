@@ -9,6 +9,7 @@ Created on Sun Feb 28 14:41:20 2021
 #This means a paths of "" will be the MusicSampler environment variable directory
 from .encoders import MidiToDecimal
 from os.path import join, relpath
+from .sampler import Sampler
 from os import getenv, walk
 from .sampler import loadSmp
 smpPath = join(getenv("MUSICSAMPLER"), "obj")
@@ -41,7 +42,7 @@ def play(path, ind):
     smpFile = join(smpPath,relpath(path))
     smp = loadSmp(smpFile)
     piece = smp.generated[ind].piece
-    MidiToDecimal.play(piece)
+    Sampler.playEncoded(piece)
     return piece
   
 

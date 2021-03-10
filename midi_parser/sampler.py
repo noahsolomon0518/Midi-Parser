@@ -132,7 +132,7 @@ class Sampler:
         self.maxLen = len(xTrain[0])
         self.xTrain = xTrain
         self.generated = []
-        self.cached = None
+        self.cached = []
     
         
         
@@ -143,7 +143,7 @@ class Sampler:
     
     #Generates in the form of one hot encoded vectors then converted to decimal
     #to be stored and played easily. 
-    def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500, prompt = True):
+    def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500, prompt = True, cache = True):
         start = choice(self.xTrain)
         piece = []
         generated = start
@@ -161,8 +161,8 @@ class Sampler:
             generated = np.concatenate([generated,preds])
             print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
         print("Piece generated...")
-        
-        self.cached = piece
+        if(cache):
+            self.cached.append(piece)
         
         if(prompt):
             self._prompt(
@@ -180,7 +180,7 @@ class Sampler:
         if(shouldSave == "1"):
             print("---Saving Piece---")
             title = input("Piece title: ")
-            self._savePiece(piece, title)
+            self.savePiece(piece, title)
             print("Piece saved... \n1:GENERATE NEW PIECE \n2:ABORT \n")
             generateNew = input("")
             if(generateNew == "1"):
@@ -193,11 +193,11 @@ class Sampler:
 
     #Used to save most recently generated piece. Useful for testing
     def saveCached(self, title):
-        self._savePiece(self.cached, title)
+        self.savePiece(self.cached, title)
 
         
     #Appends GeneratedPiece to self which will eventually be passed to SmpFile
-    def _savePiece(self, piece, title):
+    def savePiece(self, piece, title):
         
         self.generated.append(GeneratedPiece(piece, title))
         
@@ -230,7 +230,7 @@ class Sampler:
 
         convertedPiece = []
         #Count total time units
-        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+1000
+        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+100
         notesByTimeUnit = [[] for i in range(totalTimeUnits)]
 
         currentTimeUnit = 0
