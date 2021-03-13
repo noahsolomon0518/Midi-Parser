@@ -182,10 +182,13 @@ class OneHotEncodeMultiNet(OneHotEncoder):
         for i in range(nSamples):
             for j, note in enumerate(xNotes[i]):
                 x[i][j][note] = 1
-            yNotesOH[i][yNotes[i]] = 1
+            ind = np.min([yNotes[i], self.nClassesNotes-1])
+            yNotesOH[i][ind] = 1
             for j, time in enumerate(xTimes[i]):
-                x[i][j][time+self.nClassesNotes] = 1
-            yTimesOH[i][yTimes[i]] = 1
+                ind = np.min([time+self.nClassesNotes, self.nClasses-1])
+                x[i][j][ind] = 1
+            ind = np.min([yTimes[i], self.nClassesTimes-1])
+            yTimesOH[i][ind] = 1
         return x,yNotesOH,yTimesOH
 
 

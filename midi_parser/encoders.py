@@ -216,35 +216,41 @@ class OneTrackOnOnly(OneTrack):
                 
                 
 
-
-
-
-
-    
-
-
-
-
-
-    
-
-
-
-
-
-
     
 """
+##
+
+--MidiToDecimal--
+
+##
+
+
+--Purpose--
+Takes midi file paths and parses them to some type of decimal encoding. After this classes is used, it is assumed that
+they encoded sequences will be one hot encoded.
+
 --Parameters--
 folder: Folder to get midis
 debug: Whether or not all data should be stored in memory to allow easier debugging. DO NOT USE WHEN PARSING A LOT OF MIDIS
 r: If true, recursively find all midis in a folder
 convertToC: Convert keys of midis to C. As a result midis without keys will not be parsed
 scales: Whether to accept major, minor, or both scales. Only used if convertToC is True. Options are "both", "major", "minor"
+method: Method of encoding. Three different types
 
+    1. "on_only": Each note on is encoded as its repective note 0-87. 88 represents waittime. After each signal encoding
+                  the duration of the note in terms of time units is then recorded. This method worked OK, but it is
+                  hard for a LSTM to differentiate between signal notes and durations. 
+
+    2. "on_and_off": Note offs encoded as 0-87 and note ons encodeds as 88-175. Waiting times recorded as 176-<175+maxTimeUnit>
+                     The high dimensions make this approach not too effective. 
+    
+    3. "multi_network": Similar approach of "on_only" but returns 2 lists of notes/waiting time and durations for each midi
+                        This method is used with the assumption that a neural network which predicts a time duration,
+                        then using that prediction, predicts a note. By far is the most direct, simple and effective
+                        method. For one hot encoding use OneHotEncodeMultiNet.
 
 """
-# Main class to be used. Takes in directory and parses all midis to encoded sequences
+
 class MidiToDecimal:
 
     def __init__(self, folder, debug=False, r=True, convertToC = True,  scales = "both", method = "on_and_off"):
@@ -258,9 +264,13 @@ class MidiToDecimal:
         self.addFolders(folder, r=True)
         self.debug = debug
 
+
+    #queues more folders
     def addFolders(self, folder, r=True):
         self.paths.extend(findMidis(folder, r))
 
+
+    #call when all midi folders added
     def encode(self):
         midos = self._pathsToMidos(self.paths)
         oneTracks = self._midosToOT(midos)
@@ -308,45 +318,48 @@ class MidiToDecimal:
 
     
 
-    @staticmethod
-    def play(piece):
-        fs = fluidsynth.Synth()
-        fs.start()
-        sfid = fs.sfload(sf2)
-        fs.program_select(0, sfid, 0, 0)
-        for msg in piece:
-            if(msg >= 176):
-                time.sleep((msg-175)*0.03)
-            elif(msg > 88):
-                fs.noteon(0, msg-88, 100)
-            else:
-                fs.noteoff(0, msg)
 
 
-  
+
 class OTEncoder:
 
     # list of midos
-    def __init__(self):
+    def __init__(self, oneTracks):
         self.encodedOTs = []
+        self._encodeAll(oneTracks)
+    
 
-    # func is a function that encodes for one OT
-    def encodeAllOT(self, OTs, func):
-        if(type(OTs) != list):
-            OTs = [OTs]
-        for OT in OTs:
-            func(OT)
+    def _encodeAll(self, oneTracks):
+        for track in oneTracks:
+            self.encodedOTs.append(self._encodeOneMido(track))
+
+    def _encodeOneMido(self, track):
+        pass
+
+    @staticmethod
+    def normalizedTime(time, tpb, normalizationFactor):
+        norm = tpb/normalizationFactor
+        normalizedT = time/norm
+        if(normalizedT >= 0.5):
+            normalizedT = round(normalizedT)
+        elif(normalizedT > 0):
+            normalizedT = 1
+        else:
+            normalizedT = 0
+        return normalizedT
+
+
 
 #timeDims are the amount of distinct numbers can represent timing...
 class OTEncoderOnOff(OTEncoder):
 
-    def __init__(self, oneTracks, normalizationFactor=16, timeDims = 0):
+    def __init__(self, oneTracks, normalizationFactor=16):
 
         self.normalizationFactor = normalizationFactor
-        super().__init__()
-        super().encodeAllOT(oneTracks, self.encodeOneMido)
+        super().__init__(oneTracks)
 
-    def encodeOneMido(self, OT):
+    def _encodeOneMido(self, OT):
+
         encodedOT = []
 
         for note in OT.notesRel:
@@ -361,16 +374,7 @@ class OTEncoderOnOff(OTEncoder):
     #Which is veryyyyyyy small
     @staticmethod
     def encodeOneNote(note, tpb, normalizationFactor):
-
-        norm = tpb/normalizationFactor
-        normalizedDT = note.time/norm
-        if(normalizedDT >= 0.5):
-            normalizedDT = round(normalizedDT)
-        elif(normalizedDT > 0):
-            normalizedDT = 1
-        else:
-            normalizedDT = 0
-
+        normalizedDT = OTEncoder.normalizedTime(note.time, tpb, normalizationFactor)
         waitTime = []
         waitTime = [175+normalizedDT] if normalizedDT > 0 else []
         if(note.type == "note_on"):
@@ -388,35 +392,22 @@ class OTEncoderOnOff(OTEncoder):
 
 
 class OTEncoderOnOnly(OTEncoder):
-    def __init__(self, oneTracks, normalizationFactor = 16, extend = True):
+    def __init__(self, oneTracks, normalizationFactor = 16):
         self.normalizationFactor = normalizationFactor
-        super().__init__()
-        super().encodeAllOT(oneTracks, self.encodeOneMido)
+        super().__init__(oneTracks)
 
 
-    def encodeOneMido(self, OT):
+    def _encodeOneMido(self, OT):
         encodedOT = []
-
         for note in OT.notesTimed:
-    
             encodedNote = self.encodeOneNote(note, OT.tpb)
             if(encodedNote!=None):
                 encodedOT.extend(encodedNote)
         if(len(encodedOT) != 0):
             self.encodedOTs.append(encodedOT)
         
-    
-
     def encodeOneNote(self, note, tpb):
-
-        norm = tpb/self.normalizationFactor
-        normalizedDT = note.time/norm
-        if(normalizedDT >= 0.5):
-            normalizedDT = round(normalizedDT)
-        elif(normalizedDT > 0):
-            normalizedDT = 1
-        else:
-            normalizedDT = 0
+        normalizedDT = OTEncoder.normalizedTime(note.time, tpb, self.normalizationFactor)
         if(normalizedDT == 0):
             return [note.note, None]
         elif(note.type == "note_on"):
