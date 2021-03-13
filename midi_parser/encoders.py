@@ -46,7 +46,7 @@ def findMidis(folder, r=True):
         paths.append(folder)
         return paths
 
-    for (dirpath, dirnames, filenames) in walk(folder):
+    for (dirpath, _, filenames) in walk(folder):
         for file in filenames:
             if ".mid" in file:
                 paths.append(path.join(dirpath, file))
@@ -331,7 +331,10 @@ class OTEncoder:
 
     def _encodeAll(self, oneTracks):
         for track in oneTracks:
-            self.encodedOTs.append(self._encodeOneMido(track))
+            encodedOT = self._encodeOneMido(track)
+            if (encodedOT != None):
+                self.encodedOTs.append(encodedOT)
+            
 
     def _encodeOneMido(self, track):
         pass
@@ -363,17 +366,17 @@ class OTEncoderOnOff(OTEncoder):
         encodedOT = []
 
         for note in OT.notesRel:
-            encodedOT.extend(OTEncoderOnOff.encodeOneNote(
+            encodedOT.extend(self.encodeOneNote(
                 note, OT.tpb, self.normalizationFactor))
         if(len(encodedOT) != 0):
-            self.encodedOTs.append(encodedOT)
+            return encodedOT
 
 
     #tpb/normFactor is the smallest unit of time. For example if normFact = 16 and tpb=64 aka 1 quarter note = 64 ticks
     #The smallest unit of time is a 1/16 of a quarter note. In this case 4 ticks would equal one of these units or a 64th note
     #Which is veryyyyyyy small
-    @staticmethod
-    def encodeOneNote(note, tpb, normalizationFactor):
+   
+    def encodeOneNote(self, note, tpb, normalizationFactor):
         normalizedDT = OTEncoder.normalizedTime(note.time, tpb, normalizationFactor)
         waitTime = []
         waitTime = [175+normalizedDT] if normalizedDT > 0 else []
@@ -400,13 +403,14 @@ class OTEncoderOnOnly(OTEncoder):
     def _encodeOneMido(self, OT):
         encodedOT = []
         for note in OT.notesTimed:
-            encodedNote = self.encodeOneNote(note, OT.tpb)
-            if(encodedNote!=None):
+            encodedNote = self._encodeOneNote(note, OT.tpb)
+            if(None not in encodedNote):
                 encodedOT.extend(encodedNote)
         if(len(encodedOT) != 0):
-            self.encodedOTs.append(encodedOT)
+            return encodedOT
         
-    def encodeOneNote(self, note, tpb):
+        
+    def _encodeOneNote(self, note, tpb):
         normalizedDT = OTEncoder.normalizedTime(note.time, tpb, self.normalizationFactor)
         if(normalizedDT == 0):
             return [note.note, None]
@@ -421,21 +425,21 @@ class OTEncoderOnOnly(OTEncoder):
 #Each piece consist of two list 1.note list 2.time list
 class OTEncoderMultiNet(OTEncoderOnOnly):
     def __init__(self, oneTracks, normalizationFactor = 16):
-        self.normalizationFactor = normalizationFactor
-        super().__init__(oneTracks)
+        super().__init__(oneTracks, normalizationFactor)
 
     
-    def encodeOneMido(self, OT):
+    def _encodeOneMido(self, OT):
         encodedNotes = []
         encodedTimes = []
         for note in OT.notesTimed:
     
-            encodedNote, encodedTime = self.encodeOneNote(note, OT.tpb)
+            encodedNote, encodedTime = self._encodeOneNote(note, OT.tpb)
             if(encodedNote!=None and encodedTime!=None):
                 encodedNotes.append(encodedNote)
                 encodedTimes.append(encodedTime)
             
         if(len(encodedNotes) != 0):
-            self.encodedOTs.append([encodedNotes, encodedTimes])
+            return [encodedNotes, encodedTimes]
+            
         
 
