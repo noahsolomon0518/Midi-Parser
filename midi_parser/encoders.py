@@ -319,7 +319,21 @@ class MidiToDecimal:
     
 
 
+"""
+##
 
+--OTEncoder--
+
+##
+
+
+--Purpose--
+Psuedo interface to make incorporating new encoders more of an easy process. Subclasses must include _encodeOneMido function
+to work with OTEncoder
+
+--Parameters--
+oneTracks: List of oneTrack objects
+"""
 
 class OTEncoder:
 
@@ -353,7 +367,24 @@ class OTEncoder:
 
 
 
-#timeDims are the amount of distinct numbers can represent timing...
+
+"""
+##
+
+--OTEncoderOnOff--
+
+##
+
+
+--Purpose--
+Encodes note ons and note offs as well as waiting times
+
+--Parameters--
+oneTracks: List of oneTrack objects
+normalizationFactor: Smallest unit of time is quarter note / <normalizationFactor>. Larger it is the smaller and more accurate
+                     units of times are. But more dimensions
+"""
+
 class OTEncoderOnOff(OTEncoder):
 
     def __init__(self, oneTracks, normalizationFactor=16):
@@ -371,10 +402,6 @@ class OTEncoderOnOff(OTEncoder):
         if(len(encodedOT) != 0):
             return encodedOT
 
-
-    #tpb/normFactor is the smallest unit of time. For example if normFact = 16 and tpb=64 aka 1 quarter note = 64 ticks
-    #The smallest unit of time is a 1/16 of a quarter note. In this case 4 ticks would equal one of these units or a 64th note
-    #Which is veryyyyyyy small
    
     def encodeOneNote(self, note, tpb, normalizationFactor):
         normalizedDT = OTEncoder.normalizedTime(note.time, tpb, normalizationFactor)
@@ -393,6 +420,23 @@ class OTEncoderOnOff(OTEncoder):
             return waitTime
 
 
+
+"""
+##
+
+--OTEncoderOnOnly--
+
+##
+
+
+--Purpose--
+Only encodes note ons/waiting time as signal events and durations following each signal event
+
+--Parameters--
+oneTracks: List of oneTrack objects
+normalizationFactor: Smallest unit of time is quarter note / <normalizationFactor>. Larger it is the smaller and more accurate
+                     units of times are. But more dimensions
+"""
 
 class OTEncoderOnOnly(OTEncoder):
     def __init__(self, oneTracks, normalizationFactor = 16):
@@ -422,7 +466,24 @@ class OTEncoderOnOnly(OTEncoder):
 
 
 
-#Each piece consist of two list 1.note list 2.time list
+
+"""
+##
+
+--OTEncoderOnOff--
+
+##
+
+
+--Purpose--
+For each midi returns two list. One for the notes/waiting time and one for the durations of each note. 
+
+--Parameters--
+oneTracks: List of oneTrack objects
+normalizationFactor: Smallest unit of time is quarter note / <normalizationFactor>. Larger it is the smaller and more accurate
+                     units of times are. But more dimensions
+"""
+
 class OTEncoderMultiNet(OTEncoderOnOnly):
     def __init__(self, oneTracks, normalizationFactor = 16):
         super().__init__(oneTracks, normalizationFactor)
