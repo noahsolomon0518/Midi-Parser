@@ -41,7 +41,6 @@ class TestOTEncoderOnOff(unittest.TestCase):
 
 class TestOTEncoderOnOnly(unittest.TestCase):
     def test_lengths(self):
-        
         encodedOTs = encoderOn.encoded
         print(encodedOTs)
         self.assertGreater(len(encodedOTs), 0)

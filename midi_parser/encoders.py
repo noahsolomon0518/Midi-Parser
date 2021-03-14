@@ -55,11 +55,6 @@ def findMidis(folder, r=True):
     return paths
 
 
-# Encompasses entire process of encoding for NN,  from getting midi paths to one hot encoding
-def pathsToOneHot(MidiToDecimal, OneHotEncoder):
-    sequences = MidiToDecimal.encode()
-    OneHotEncoder.encode(sequences)
-    return (OneHotEncoder.xEncoded, OneHotEncoder.yEncoded)
 
 
 '''
@@ -71,7 +66,24 @@ def pathsToOneHot(MidiToDecimal, OneHotEncoder):
 '''
 
 
-# OneTrack object uses Note to simplify midi representation
+'''
+##
+--Note--
+##
+
+
+--Purpose--
+Used for recording meaningful data for each note attained from mido object. OneTrack class is meant to be filled with
+many Notes
+
+--Parameters--
+note: respective note ranging from 0-87
+time: delta time relative to previous notes. In terms of ticks.
+type: can be "note_on", "note_off", or "time_unit"
+velocity: soley used to determine if "note_on" is actually "note_off" (note on with 0 velocity which is common in midi files)
+'''
+
+
 class Note:
     def __init__(self, note, time, type, velocity):
         self.note = note
@@ -89,7 +101,21 @@ class Note:
 
 
 
+'''
+##
+--OneTrack
+##
 
+--Purpose--
+Since midis have multiple tracks, one for each channel, in order to get all notes at played correctly synchronously,
+the track must be converted to absolutes time, then back to relative time. OneTrack records does this, in addition to 
+keeping track of important information such as ticks per beat and key. 
+
+--Parameters--
+mido: mido object to construct OneTrack
+convertToC: whether or not to convert midi to C. If no key then will not be valid
+scales: if want major/minor or both scales. If no key, then will not be valid
+'''
 
 class OneTrack:
 
@@ -114,7 +140,7 @@ class OneTrack:
             self._convertToNotesRel()
 
     
-
+    #Checks if midi file has key information which is needed for key change
     def _isValid(self):
         if(self.key==None and (self.convertToC == True or self.scales != "both")):
             return False
@@ -167,7 +193,6 @@ class OneTrack:
         self.notesAbs.sort(key=lambda x: x.time)
 
 
-    #mode can either be "on-off" or "on".  If "on-off" sees note off as distinct note. Other wise records time relative to how long note played
     def _convertToNotesRel(self):
         notesAbs = self.notesAbs.copy()
         firstNote = notesAbs[0]
@@ -192,7 +217,22 @@ class OneTrack:
             newNote = note + self.halfStepsAboveC
         return newNote
 
-#Calculates time between each note and encodes it.
+
+
+
+'''
+##
+--OneTrackOnOnly--
+##
+
+
+--Purpose--
+Same as OneTrack but calculates how long notes are held for. Used for MidiToDecimal with method = "on_only" or "multi_network"
+
+--Parameters--
+Same as OneTrack
+
+'''
 class OneTrackOnOnly(OneTrack):
 
     def __init__(self, mido, convertToC = True, scales = "both"):
@@ -336,8 +376,6 @@ oneTracks: List of oneTrack objects
 """
 
 class OTEncoder:
-
-    # list of midos
     def __init__(self, oneTracks):
         self.encodedOTs = []
         self._encodeAll(oneTracks)
