@@ -7,7 +7,7 @@
 #          To the environment variable "MUSICSAMPLER"
 
 
-import asyncio
+
 import os
 from os.path import join, relpath
 import numpy as np
@@ -31,10 +31,7 @@ fs.program_select(0, sfid, 0, 0)
 
 ###
 '''
-async def playnote(note, _time):
-    fs.noteon(0, note, 80)
-    await asyncio.sleep(_time*0.03)
-    fs.noteoff(0, note)
+
 
 
 
@@ -59,7 +56,6 @@ def loadSmp(filepath):
     obj = pickle.load(infile)
     infile.close()
     
-    
     if(type(obj)!=SmpFile):
         raise TypeError("filename provided is not SmpFile object")
     return obj
@@ -73,8 +69,6 @@ def sample(preds, temperature = 0.5):
     probs = np.random.multinomial(1,preds,1)
     return np.argmax(probs)
 
-def sample2(preds):
-    return choice(range(len(preds)))
     
 
 #Takes one hot encoded vectors and converts them to their respective integers
@@ -97,23 +91,15 @@ def encodeFromOneHot(generated):
 
 
 
-#Data structure stored in MusicSampler and SmpFile 
-class GeneratedPiece:
-    def __init__(self, piece, title):
-        self.piece = piece
-        self.title = title
-
-
 
 
 #Can't figure out to pickle keras models so just recorded modelpath 
 #Description should include what data was used to train, how many epochs, and what the outcome was
 class SmpFile:
-    def __init__(self, modelPath, generated, description, title):
-        self.title = title
+    def __init__(self, modelPath, generated):
         self.modelPath = modelPath
         self.generated = generated 
-        self.description = description
+
         
     @property
     def model(self):
@@ -132,7 +118,6 @@ class Sampler:
         self.maxLen = len(xTrain[0])
         self.xTrain = xTrain
         self.generated = []
-        self.cached = []
     
         
         
@@ -143,75 +128,64 @@ class Sampler:
     
     #Generates in the form of one hot encoded vectors then converted to decimal
     #to be stored and played easily. 
-    def generate(self, temp, shouldSample = True, roundPredictions = True,nNotes = 500, prompt = True, cache = True):
-        start = choice(self.xTrain)
-        piece = []
-        generated = start
+    def generate(self, temp, nNotes = 500):
         print("---Generating Piece---")
-        for i in range(nNotes):
-            priorNotes = np.expand_dims(generated[-self.maxLen:], axis = 0)
-            preds = self.model.predict(priorNotes)
-            if(shouldSample):    
-                argmax = sample(preds[0], temp)
-            else:
-                argmax = np.argmax(preds[0])
-            piece.append(argmax)
-            if(roundPredictions):
-                preds = preds.astype('int')
-            generated = np.concatenate([generated,preds])
-            print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
+        if(len(self.model.output)==1):
+            piece = self._generateReg(temp, nNotes)
+        elif(len(self.model.output)==2):
+            piece = self._generateMulti(temp, nNotes)
+
         print("Piece generated...")
-        if(cache):
-            self.cached.append(piece)
-        
-        if(prompt):
-            self._prompt(
-                piece = piece,
-                temp = temp, 
-                shouldSample = shouldSample,
-                roundPredictions = roundPredictions,
-                nNotes = nNotes)
+        self.generated.append(piece)
     
 
-    def _prompt(self, piece, **args):
-        Sampler.playEncoded(piece)
-        print('1:SAVE PIECE \n2:GENERATE NEW PIECE \n3:ABORT\n')
-        shouldSave = input("")
-        if(shouldSave == "1"):
-            print("---Saving Piece---")
-            title = input("Piece title: ")
-            self.savePiece(piece, title)
-            print("Piece saved... \n1:GENERATE NEW PIECE \n2:ABORT \n")
-            generateNew = input("")
-            if(generateNew == "1"):
-                self.generate(**args)
-        elif(shouldSave == "2"):
-            self.generate(**args)
-        
+    def _generateReg(self, temp, nNotes):
+        piece = []
+        generated = choice(self.xTrain)
+        for i in range(nNotes):
+            priorNotes = self._getPriorNotes(generated)
+            preds = self.model.predict(priorNotes)
+            argMax = sample(preds, temp)
+            piece.append(argMax)
+            generated = np.concatenate([generated,preds])
+            self._printProgress(i, nNotes)
+        return piece
 
+    def _generateMulti(self, temp, nNotes):
+        piece = []
+        generated = choice(self.xTrain)
+        for i in range(nNotes):
+            priorNotes = self._getPriorNotes(generated)
+            predNotes, predTimes = self.model.predict(priorNotes)
+            argmaxNotes = sample(predNotes[0], temp)
+            argmaxTimes = sample(predTimes[0], temp)
+            piece.extend([argmaxNotes,argmaxTimes])
+            preds = np.concatenate([predNotes, predTimes], axis = 1)
+            generated = np.concatenate([generated,preds])
+        return piece
 
+    def _printProgress(self, i, nNotes):
+        print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
 
-    #Used to save most recently generated piece. Useful for testing
-    def saveCached(self, title):
-        self.savePiece(self.cached, title)
+    def _getPriorNotes(self, generated):
+        return np.expand_dims(generated[-self.maxLen:], axis = 0)
 
-        
-    #Appends GeneratedPiece to self which will eventually be passed to SmpFile
-    def savePiece(self, piece, title):
-        
-        self.generated.append(GeneratedPiece(piece, title))
-        
-        
-        
-        
+   
+
         
     
     #Play a decimal encoded piece using roundedEncoding (If I decide to make more encoding methods)
     @staticmethod
     def playEncoded(piece, timeunit = 0.03):
 
-        if(max([piece[i] for i in range(len(piece)) if i%2==0]) < 176):
-            piece = Sampler.convertToOnOff(piece)
+        if(Sampler.isOnOnly(piece)):
+            piece = Sampler.onOnlyToOnOff(piece)
+
+
+        elif(Sampler.isMultiNet(piece)):
+            piece = Sampler.onOnlyToOnOff(piece)
+
+
         fs = fluidsynth.Synth()
         fs.start()
         sfid = fs.sfload(sf2)
@@ -226,7 +200,21 @@ class Sampler:
 
 
     @staticmethod
-    def convertToOnOff(piece):
+    def isOnOnly(piece):
+        return (max([piece[i] for i in range(len(piece)) if i%2==0]) < 176)
+
+    @staticmethod
+    def isMultiNet(piece):
+        return len(piece[0])==2
+    
+
+    @staticmethod
+    def multiNetToOnOff(piece):
+        pass
+
+
+    @staticmethod
+    def onOnlyToOnOff(piece):
 
         convertedPiece = []
         #Count total time units
@@ -251,7 +239,7 @@ class Sampler:
                 for note in timeUnit:
                     convertedPiece.append(note)
                 convertedPiece.append(176)    #Each timeunit represents 176
-        #print(notesByTimeUnit)
+
         return convertedPiece
         
 
@@ -263,12 +251,11 @@ class Sampler:
     def save(self, filepath):
         samplerFP = join(smpPath, relpath("obj/"+filepath+".smp"))
         h5FP = join(smpPath, relpath("h5/"+filepath+".h5"))
-        print("---Saving generated music as SmpFile---")
         self.model.save(h5FP)
-        title = input("Title of AI: ")
-        description = input("Description of Music: ")
-        smp = SmpFile(h5FP, self.generated, description, title)
+        smp = SmpFile(h5FP, self.generated)
         saveSmp(samplerFP, smp)
+
+
         
     
     
