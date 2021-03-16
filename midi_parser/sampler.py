@@ -11,6 +11,8 @@
 import os
 from os.path import join, relpath
 import numpy as np
+import tensorflow as tf
+from mido import Message, MidiFile, MidiTrack
 from random import choice
 import fluidsynth
 import time
@@ -35,30 +37,23 @@ fs.program_select(0, sfid, 0, 0)
 
 
 
-
-#pickles up a SmpFile
-def saveSmp(filename, obj):
-    assert ".smp" in filename
-    if(os.path.isfile(filename)):
-        raise FileExistsError
-    if(type(obj)!=SmpFile):
-        raise TypeError("object provided is not SmpFile object. It is "+ str(type(obj)))
-    outfile = open(filename,'wb')
-    pickle.dump(obj, outfile)
+#Saves smpfiles as well as regular pieces
+def saveSmp(piece, filepath):
+    if ".smp" not in filepath:
+        filepath += ".smp"
+    outfile = open(filepath,'wb')
+    if(type(piece)==SmpFile):
+        piece = piece.piece
+        
+    pickle.dump(piece, outfile)
     outfile.close()
     
-    
-    
-#returns SmpFile from disk. INCLUDE .smp FILE EXTENTION!!
 def loadSmp(filepath):
-    samplerFP = os.path.join(smpPath, os.path.join("obj",filepath))
-    infile = open(samplerFP,'rb')
-    obj = pickle.load(infile)
-    infile.close()
     
-    if(type(obj)!=SmpFile):
-        raise TypeError("filename provided is not SmpFile object")
-    return obj
+    infile = open(filepath,'rb')
+    piece = SmpFile(pickle.load(infile))
+    infile.close()
+    return piece
 
 #Mixes up probabilities of multinomial distribution (prediction of music neural network)
 def sample(preds, temperature = 0.5):
@@ -93,17 +88,102 @@ def encodeFromOneHot(generated):
 
 
 
-#Can't figure out to pickle keras models so just recorded modelpath 
-#Description should include what data was used to train, how many epochs, and what the outcome was
-class SmpFile:
-    def __init__(self, modelPath, generated):
-        self.modelPath = modelPath
-        self.generated = generated 
 
+class Player:
+    @staticmethod
+    def playEncoded(piece, timeunit = 0.03):
+        fs = fluidsynth.Synth()
+        fs.start()
+        sfid = fs.sfload(sf2)
+        fs.program_select(0, sfid, 0, 0)
+        for msg in piece:
+            if(msg>=176):
+                time.sleep((msg-175)*timeunit)
+            elif(msg>88):
+                fs.noteon(0, msg-88, 100)
+            else:
+                fs.noteoff(0, msg)
+
+
+
+
+
+    
+
+class SmpFile:
+    def __init__(self, piece):
+        if(self._isOnOnly(piece)):
+            piece = self._onOnlyToOnOff(piece)
+        self.piece = piece
         
-    @property
-    def model(self):
-        return load_model(self.modelPath)
+
+    def _isOnOnly(self, piece):
+        return (max([piece[i] for i in range(len(piece)) if i%2==0]) < 176)
+
+    def _onOnlyToOnOff(self, piece):
+        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+100
+        notesByTimeUnit = self._calcNoteOnNoteOffs(piece, totalTimeUnits)
+        convertedPiece = self._collapseTimeUnits(notesByTimeUnit)
+        return convertedPiece
+
+    def _calcNoteOnNoteOffs(self, piece, totalTimeUnits):
+        notesByTimeUnit = [[] for i in range(totalTimeUnits)]
+        currentTimeUnit = 0
+        for i,evt in enumerate(piece):
+            if(i%2 == 0):
+                if(evt==88):
+                    currentTimeUnit += piece[i+1]
+                else:
+                    notesByTimeUnit[currentTimeUnit].append(88+evt)
+                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
+        return notesByTimeUnit
+
+    #If there are many 176's right next to each other they can be combined
+    def _collapseTimeUnits(self, notesByTimeUnit):
+        convertedPiece = []
+        for timeUnit in notesByTimeUnit:
+            if(len(timeUnit)==0 and len(convertedPiece)>0):
+                convertedPiece[-1]+=1
+            else:
+                for note in timeUnit:
+                    convertedPiece.append(note)
+                convertedPiece.append(176)    #Each timeunit represents 176
+        return convertedPiece
+    
+
+    def play(self):
+        Player.playEncoded(self.piece)
+
+
+    def saveMidi(self, path, ticksPerTimeUnit = 16):
+        mid = MidiFile()
+        track = MidiTrack()
+        mid.tracks.append(track)
+        for i, message in enumerate(self.piece):
+            if(i>0 and self.piece[i-1]>175):
+                dt = (self.piece[i-1] - 175) * ticksPerTimeUnit
+            else:
+                dt = 0
+            self._addMessage(dt, message, track)
+        mid.save(path)
+
+    def _addMessage(self, dt, message, track):
+        #If note off
+        if(message<88):
+            track.append(Message('note_off', note=message, velocity=127, time=dt))
+        elif(message<176):
+            track.append(Message('note_on', note=message-88, velocity=127, time=dt))
+
+
+
+    
+
+
+
+
+    
+
+    
 
 
 
@@ -128,20 +208,25 @@ class Sampler:
     
     #Generates in the form of one hot encoded vectors then converted to decimal
     #to be stored and played easily. 
-    def generate(self, temp, nNotes = 500):
+    def generate(self, temp, nNotes = 500, save = False, fp = None):
+        if(save):
+            assert fp != None
         print("---Generating Piece---")
         if(len(self.model.output)==1):
             piece = self._generateReg(temp, nNotes)
         elif(len(self.model.output)==2):
             piece = self._generateMulti(temp, nNotes)
-
         print("Piece generated...")
-        self.generated.append(piece)
+        self.generated.append(SmpFile(piece))           
+        if(save):
+            saveSmp(piece, fp)
+        return SmpFile(piece)
     
 
     def _generateReg(self, temp, nNotes):
         piece = []
         generated = choice(self.xTrain)
+        
         for i in range(nNotes):
             priorNotes = self._getPriorNotes(generated)
             preds = self.model.predict(priorNotes)
@@ -151,18 +236,23 @@ class Sampler:
             self._printProgress(i, nNotes)
         return piece
 
+
+    #Does not work with gpu :(
     def _generateMulti(self, temp, nNotes):
-        piece = []
-        generated = choice(self.xTrain)
-        for i in range(nNotes):
-            priorNotes = self._getPriorNotes(generated)
-            predNotes, predTimes = self.model.predict(priorNotes)
-            argmaxNotes = sample(predNotes[0], temp)
-            argmaxTimes = sample(predTimes[0], temp)
-            piece.extend([argmaxNotes,argmaxTimes])
-            preds = np.concatenate([predNotes, predTimes], axis = 1)
-            generated = np.concatenate([generated,preds])
-        return piece
+        with tf.device('/cpu:0'):
+            piece = []
+            generated = choice(self.xTrain)
+
+            for i in range(nNotes):
+                priorNotes = self._getPriorNotes(generated)
+                predNotes, predTimes = self.model.predict(priorNotes)
+                argmaxNotes = sample(predNotes[0], temp)
+                argmaxTimes = sample(predTimes[0], temp)
+                piece.extend([argmaxNotes,argmaxTimes])
+                preds = np.concatenate([predNotes, predTimes], axis = 1)
+                generated = np.concatenate([generated,preds])
+                self._printProgress(i, nNotes)
+            return piece
 
     def _printProgress(self, i, nNotes):
         print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
@@ -171,112 +261,3 @@ class Sampler:
         return np.expand_dims(generated[-self.maxLen:], axis = 0)
 
    
-
-        
-    
-    #Play a decimal encoded piece using roundedEncoding (If I decide to make more encoding methods)
-    @staticmethod
-    def playEncoded(piece, timeunit = 0.03):
-
-        if(Sampler.isOnOnly(piece)):
-            piece = Sampler.onOnlyToOnOff(piece)
-
-
-        elif(Sampler.isMultiNet(piece)):
-            piece = Sampler.onOnlyToOnOff(piece)
-
-
-        fs = fluidsynth.Synth()
-        fs.start()
-        sfid = fs.sfload(sf2)
-        fs.program_select(0, sfid, 0, 0)
-        for msg in piece:
-            if(msg>=176):
-                time.sleep((msg-175)*timeunit)
-            elif(msg>88):
-                fs.noteon(0, msg-88, 100)
-            else:
-                fs.noteoff(0, msg)
-
-
-    @staticmethod
-    def isOnOnly(piece):
-        return (max([piece[i] for i in range(len(piece)) if i%2==0]) < 176)
-
-    @staticmethod
-    def isMultiNet(piece):
-        return len(piece[0])==2
-    
-
-    @staticmethod
-    def multiNetToOnOff(piece):
-        pass
-
-
-    @staticmethod
-    def onOnlyToOnOff(piece):
-
-        convertedPiece = []
-        #Count total time units
-        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+100
-        notesByTimeUnit = [[] for i in range(totalTimeUnits)]
-
-        currentTimeUnit = 0
-        for i,evt in enumerate(piece):
-
-            if(i%2 == 0):
-                if(evt==88):
-                    currentTimeUnit += piece[i+1]
-
-                else:
-                    notesByTimeUnit[currentTimeUnit].append(88+evt)
-                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
-            
-        for timeUnit in notesByTimeUnit:
-            if(len(timeUnit)==0 and len(convertedPiece)>0):
-                convertedPiece[-1]+=1
-            else:
-                for note in timeUnit:
-                    convertedPiece.append(note)
-                convertedPiece.append(176)    #Each timeunit represents 176
-
-        return convertedPiece
-        
-
-
-
-    
-    
-    #folder relative to Sampler environment variable path/obj
-    def save(self, filepath):
-        samplerFP = join(smpPath, relpath("obj/"+filepath+".smp"))
-        h5FP = join(smpPath, relpath("h5/"+filepath+".h5"))
-        self.model.save(h5FP)
-        smp = SmpFile(h5FP, self.generated)
-        saveSmp(samplerFP, smp)
-
-
-        
-    
-    
-    
-    
-    
-        
-    
-
-
-
-
-
-    
-
-
-    
-
-
-
-
-
-
-

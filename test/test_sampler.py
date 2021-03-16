@@ -4,61 +4,63 @@ Created on Sat Feb 27 18:07:40 2021
 
 @author: noahs
 """
-from midi_parser.encoders import MidiToDecimal, OneHotEncoder, pathsToOneHot
-from midi_parser.sampler import Sampler, loadSmp
+from midi_parser.encoders import MidiToDecimal
+from midi_parser.one_hot import OneHotEncodeMultiNet
+from midi_parser.sampler import Sampler, loadSmp, saveSmp
 import tensorflow as tf
 import unittest
 from keras.layers import Dense, LSTM
 from keras.models import Sequential
-
-
-maxLen, maxDim = 20, 200
-
-
-mtd = MidiToDecimal("dminor")
-ohe = OneHotEncoder(maxLen,3,maxDim)
-
-
-(x, y) = pathsToOneHot(mtd,ohe)
+from keras.models import load_model
 
 
 
 
-class TestMusicNetwork(unittest.TestCase):
-    
+
+
+
+
+class TestSamplerMultiNet(unittest.TestCase):
+
+
     def setUp(self):
-        self.name = ""
-        do = input("build NN? 1:Yes 0:No\n")
-        if(do=="1"):
-            mod = None
-            with tf.device("cpu:0"):
-                mod = Sequential()
-                mod.add(LSTM(64, dropout=0.3,  input_shape=(maxLen, maxDim), return_sequences = True))
-                mod.add(LSTM(128,  return_sequences = False))
-                mod.add(Dense(maxDim, activation = 'softmax'))
-                mod.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-                mod.fit(x,y, epochs = 1)
-                
-                
-                
-            self.ms = Sampler(mod, x)
-            do = input("Generate music test? 1:Yes 0:No\n")
-            if(do=="1"):
-                ms = self.ms
-                ms.generate(temp = 0.4, nNotes = 100)
-                
-                name = input("Name: ")
-                self.name = name
-                ms.save(name)
-            
+        multiGenModel = load_model("models/testing/test_multigen.h5")
+        deciData = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/testing", method = "multi_network").encode()
+        ohe = OneHotEncodeMultiNet(lookback=50)
+        xTrain,_1,_2 = ohe.encode(deciData, 10)
+        self.sampler = Sampler(multiGenModel, xTrain)
 
+    def test_generateMusic(self):
+        smp = self.sampler.generate(temp = 0.5, nNotes=10)
+        self.musicLength(smp.piece)
+        self.play(smp)
+        self.save(smp)
+        self.load()
+        self.saveMidi(smp)
+
+    def musicLength(self,piece):
+        self.assertGreater(len(piece),0)
+
+    def play(self, smp):
+        smp.play()
+
+
+
+    def save(self, smp):
+        saveSmp(smp, "models/testing/test_piece.smp")
+
+    def load(self):
+        smp = loadSmp("models/testing/test_piece.smp")
+        smp.play()
+
+    def saveMidi(self, smp):
+
+        smp.saveMidi("models/testing/test_piece.mid")
+        newSmp = loadSmp("C:/Users/noahs/Data Science/Music Generation AI/generated/bach/small_epochs/keepers/epoch_1981_p1.smp")
+        newSmp.saveMidi("models/testing/test_grakPiece.mid", 32)
     
-    def test_load_sampler(self):
-        do = input("Load Sampler? 1:Yes 0:No\n")
-        if(do=="1"):    
-            name = input("which model"+"last model was "+ self.name)
-            ms = loadSmp(name)
-            ms.model.summary()
-    
-    
+
+
+
+
 
