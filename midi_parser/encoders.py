@@ -369,7 +369,7 @@ class MidiToDecimal:
         for mido in midos:
             if(self.method == "on_and_off"):
                 ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales, maxOctaves = self.maxOctaves)
-            elif(self.method in ["on_only", "multi_network"]):
+            elif(self.method in ["on_only", "multi_network", "encapsul_net"]):
                 ot = OneTrackOnOnly(mido, convertToC=self.convertToC, scales=self.scales, maxOctaves = self.maxOctaves)
             if(ot.notesRel != [] and ot != None):
                 oneTracks.append(ot)
@@ -566,6 +566,9 @@ class OTEncoderMultiNet(OTEncoderOnOnly):
             
         if(len(encodedNotes) != 0):
             return [encodedNotes, encodedTimes]
+
+
+class OTEncoderEncapsulNet()
             
         
 
