@@ -117,12 +117,24 @@ convertToC: whether or not to convert midi to C. If no key then will not be vali
 scales: if want major/minor or both scales. If no key, then will not be valid
 '''
 
+
+
 class OneTrack:
 
-    def __init__(self, mido, convertToC = True, scales = "both"):
+    MIDDLE_C = 60
+    NOTES_PER_OCTAVE = 12
+    DEFAULT_MICRO_SECS_PER_BEAT = 50000
+
+    def __init__(self, mido, convertToC = True, scales = "both", maxOctaves = 4):
+        assert maxOctaves in [2,4,6]
         self.mido = mido
+        self.maxOctaves = maxOctaves
+        self.minNote, self.maxNote = OneTrack.calcMinMaxNote(maxOctaves)
+        print("min Note", self.minNote)
+        print("max Note", self.maxNote)
         self.convertToC = convertToC
         self.scales = scales
+        self.microSecsPerBeat = OneTrack.DEFAULT_MICRO_SECS_PER_BEAT
         self.key = None
         self.tpb = mido.ticks_per_beat
         self.notesAbs = []
@@ -138,6 +150,7 @@ class OneTrack:
             self.halfStepsAboveC = OneTrack.halfStepsAboveC[self.key.replace("m", "")]
             self.halfStepsBelowC = 14 - OneTrack.halfStepsAboveC[self.key.replace("m", "")]
             self._convertToNotesRel()
+            self._applyMinMaxOctave()
 
     
     #Checks if midi file has key information which is needed for key change
@@ -173,6 +186,11 @@ class OneTrack:
         "B":11
     }
 
+    @staticmethod
+    def calcMinMaxNote(maxOctaves):
+        maxNote = OneTrack.MIDDLE_C + (maxOctaves/2) * OneTrack.NOTES_PER_OCTAVE
+        minNote = OneTrack.MIDDLE_C - (maxOctaves/2) * OneTrack.NOTES_PER_OCTAVE
+        return int(minNote), int(maxNote)
 
 
     def _extractNotesAbs(self):
@@ -180,17 +198,33 @@ class OneTrack:
         for track in self.mido.tracks:
             _time = 0
             for msg in track:
+            
                 if(msg.type == "key_signature"):
                     self.key = msg.key
-                   
+                
                 _time += msg.time
                 if(msg.type in ["note_on","note_off"]):
                     self.notesAbs.append(Note(msg.note,
-                                              _time,
+                                              self._convertTicksToMSTimeUnits(_time),
                                               msg.type,
                                               msg.velocity))
 
         self.notesAbs.sort(key=lambda x: x.time)
+
+    #Input notesrel and changes note take in account of min max octave
+    def _minMaxOctaveConvert(self, note):
+        if(note.note>self.maxNote):
+            octavesToShift = (((note.note-self.maxNote)//OneTrack.NOTES_PER_OCTAVE) + 1)
+            note.note = int(note.note - 12 * octavesToShift)
+        elif(note.note<self.minNote):
+            octavesToShift = (((self.minNote - note.note)//OneTrack.NOTES_PER_OCTAVE) + 1)
+            note.note = int(note.note + 12 * octavesToShift)
+
+    #After notes converted to relative function is used to make sure every note is inside min-max note range
+    def _applyMinMaxOctave(self):
+        for note in self.notesRel:
+            self._minMaxOctaveConvert(note)
+            
 
 
     def _convertToNotesRel(self):
@@ -202,8 +236,7 @@ class OneTrack:
         for i in range(len(notesAbs[1:])-1):
             currentNote = notesAbs[i+1]
             previousNote = notesAbs[i]
-            deltaTime = currentNote.time - previousNote.time
-            
+            deltaTime = currentNote.time - previousNote.time            
             currentNoteCopy = currentNote.copy()
             if(self.convertToC):
                 currentNoteCopy.note = self.convertNoteToC(currentNoteCopy.note) 
@@ -217,7 +250,9 @@ class OneTrack:
             newNote = note + self.halfStepsAboveC
         return newNote
 
-
+    def _convertTicksToMSTimeUnits(self, ticks):
+        msTimeUnits = (ticks*(1/self.tpb)*self.microSecsPerBeat)//1000
+        return int(max([msTimeUnits, 1]))   #Ensures atleast 1 timeunit
 
 
 '''
@@ -235,8 +270,8 @@ Same as OneTrack
 '''
 class OneTrackOnOnly(OneTrack):
 
-    def __init__(self, mido, convertToC = True, scales = "both"):
-        super().__init__(mido, convertToC = True, scales = "both")
+    def __init__(self, mido, convertToC = True, scales = "both", maxOctaves = 4):
+        super().__init__(mido, convertToC = True, scales = "both", maxOctaves = maxOctaves)
         self.notesTimed = []
         self._calculateNoteOns()
 
@@ -245,11 +280,11 @@ class OneTrackOnOnly(OneTrack):
             if(note.time>0):
                 self.notesTimed.append(Note(88, note.time, "time_unit", 80))
             if(note.type == "note_on"):
-                
                 noteNum = note.note
                 dt = 0
                 for nextNote in self.notesRel[i:]:
                     if(nextNote.type == "note_off" and nextNote.note == noteNum):
+                        dt+=nextNote.time 
                         break
                     dt+=nextNote.time 
                 self.notesTimed.append(Note(note.note, dt, "note_on", 80))
@@ -289,12 +324,15 @@ method: Method of encoding. Three different types
                         then using that prediction, predicts a note. By far is the most direct, simple and effective
                         method. For one hot encoding use OneHotEncodeMultiNet.
 
+maxOctaves: how many different octaves that can be encoded. Options are [2,4,6,8]
+
 """
 
 class MidiToDecimal:
 
-    def __init__(self, folder, debug=False, r=True, convertToC = True,  scales = "both", method = "on_and_off"):
+    def __init__(self, folder, maxOctaves = 4, debug=False, r=True, convertToC = True,  scales = "both", method = "on_and_off"):
         self.convertToC = convertToC
+        self.maxOctaves = maxOctaves
         self.scales = scales
         self.midos = []
         self.method = method
@@ -330,9 +368,9 @@ class MidiToDecimal:
         oneTracks = []
         for mido in midos:
             if(self.method == "on_and_off"):
-                ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales)
+                ot = OneTrack(mido, convertToC=self.convertToC, scales=self.scales, maxOctaves = self.maxOctaves)
             elif(self.method in ["on_only", "multi_network"]):
-                ot = OneTrackOnOnly(mido, convertToC=self.convertToC, scales=self.scales)
+                ot = OneTrackOnOnly(mido, convertToC=self.convertToC, scales=self.scales, maxOctaves = self.maxOctaves)
             if(ot.notesRel != [] and ot != None):
                 oneTracks.append(ot)
 
@@ -391,17 +429,7 @@ class OTEncoder:
     def _encodeOneMido(self, track):
         pass
 
-    @staticmethod
-    def normalizedTime(time, tpb, normalizationFactor):
-        norm = tpb/normalizationFactor
-        normalizedT = time/norm
-        if(normalizedT >= 0.5):
-            normalizedT = round(normalizedT)
-        elif(normalizedT > 0):
-            normalizedT = 1
-        else:
-            normalizedT = 0
-        return normalizedT
+
 
 
 
@@ -425,9 +453,7 @@ normalizationFactor: Smallest unit of time is quarter note / <normalizationFacto
 
 class OTEncoderOnOff(OTEncoder):
 
-    def __init__(self, oneTracks, normalizationFactor=16):
-
-        self.normalizationFactor = normalizationFactor
+    def __init__(self, oneTracks):
         super().__init__(oneTracks)
 
     def _encodeOneMido(self, OT):
@@ -436,17 +462,17 @@ class OTEncoderOnOff(OTEncoder):
 
         for note in OT.notesRel:
             encodedOT.extend(self.encodeOneNote(
-                note, OT.tpb, self.normalizationFactor))
+                note, OT.tpb))
         if(len(encodedOT) != 0):
             return encodedOT
 
    
-    def encodeOneNote(self, note, tpb, normalizationFactor):
-        normalizedDT = OTEncoder.normalizedTime(note.time, tpb, normalizationFactor)
+    def encodeOneNote(self, note, tpb):
+        
         waitTime = []
-        waitTime = [175+normalizedDT] if normalizedDT > 0 else []
+        waitTime = [175+note.time] if note.time > 0 else []
         if(note.type == "note_on"):
-
+        
             if(note.velocity == 0):
                 waitTime.append(note.note)
                 return waitTime
@@ -477,8 +503,7 @@ normalizationFactor: Smallest unit of time is quarter note / <normalizationFacto
 """
 
 class OTEncoderOnOnly(OTEncoder):
-    def __init__(self, oneTracks, normalizationFactor = 16):
-        self.normalizationFactor = normalizationFactor
+    def __init__(self, oneTracks):
         super().__init__(oneTracks)
 
 
@@ -493,14 +518,12 @@ class OTEncoderOnOnly(OTEncoder):
         
         
     def _encodeOneNote(self, note, tpb):
-        normalizedDT = OTEncoder.normalizedTime(note.time, tpb, self.normalizationFactor)
-        if(normalizedDT == 0):
+        if(note.time == 0):
             return [note.note, None]
         elif(note.type == "note_on"):
-            return [note.note, normalizedDT]
+            return [note.note, note.time]
         else:
-  
-            return [88, normalizedDT]
+            return [88, note.time]
 
 
 
@@ -523,10 +546,10 @@ normalizationFactor: Smallest unit of time is quarter note / <normalizationFacto
 """
 
 class OTEncoderMultiNet(OTEncoderOnOnly):
-    def __init__(self, oneTracks, normalizationFactor = 16):
-        super().__init__(oneTracks, normalizationFactor)
+    def __init__(self, oneTracks):
+        super().__init__(oneTracks)
 
-    
+  
     def _encodeOneMido(self, OT):
         encodedNotes = []
         encodedTimes = []
@@ -534,8 +557,12 @@ class OTEncoderMultiNet(OTEncoderOnOnly):
     
             encodedNote, encodedTime = self._encodeOneNote(note, OT.tpb)
             if(encodedNote!=None and encodedTime!=None):
-                encodedNotes.append(encodedNote)
-                encodedTimes.append(encodedTime)
+
+                if(len(encodedNotes)>0 and encodedNotes[-1]==encodedNote):
+                    encodedTimes[-1]+=encodedTime
+                else:
+                    encodedNotes.append(encodedNote)
+                    encodedTimes.append(encodedTime)
             
         if(len(encodedNotes) != 0):
             return [encodedNotes, encodedTimes]

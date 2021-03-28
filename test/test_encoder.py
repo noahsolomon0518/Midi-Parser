@@ -6,6 +6,7 @@ Created on Tue Feb 23 15:26:27 2021
 """
 
 from midi_parser.encoders import MidiToDecimal, OTEncoderMultiNet, OTEncoderOnOff, OTEncoderOnOnly
+from midi_parser.sampler import Player, SmpFile
 
 
 
@@ -14,8 +15,8 @@ import unittest
 
 
 encoderOnOff = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/testing", method = "on_and_off", debug = True)
-encoderOn = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/testing", method = "on_only", debug = True)
-encoderMultiNet = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/testing", method = "multi_network", debug = True)
+encoderOn = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/testing", method = "on_only", debug = True, maxOctaves=6)
+encoderMultiNet = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/testing", method = "multi_network", debug = True, maxOctaves=6)
 
 
 encoderOnOff.encode()
@@ -30,7 +31,7 @@ class TestOTEncoderOnOff(unittest.TestCase):
 
     def test_lengths(self):
         encodedOTs = encoderOnOff.encoded
- 
+        
         self.assertGreater(len(encodedOTs), 0)
         for OT in encodedOTs:
             self.assertGreater(len(OT), 0)
@@ -42,7 +43,7 @@ class TestOTEncoderOnOff(unittest.TestCase):
 class TestOTEncoderOnOnly(unittest.TestCase):
     def test_lengths(self):
         encodedOTs = encoderOn.encoded
-        print(encodedOTs)
+
         self.assertGreater(len(encodedOTs), 0)
         for OT in encodedOTs:
             self.assertGreater(len(OT), 0)
@@ -53,6 +54,8 @@ class TestOTEncoderOnOnly(unittest.TestCase):
 class TestOTEncoderMultiNet(unittest.TestCase):
     def test_lengths(self):
         encodedOTs = encoderMultiNet.encoded
+        smp = SmpFile(encodedOTs[0])
+        smp.play()
         self.assertGreater(len(encodedOTs), 0)
         for OT in encodedOTs:
             self.assertEqual(len(OT), 2)           #One list with notes one with times durations

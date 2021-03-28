@@ -91,14 +91,15 @@ def encodeFromOneHot(generated):
 
 class Player:
     @staticmethod
-    def playEncoded(piece, timeunit = 0.03):
+    def play(piece):
         fs = fluidsynth.Synth()
         fs.start()
         sfid = fs.sfload(sf2)
         fs.program_select(0, sfid, 0, 0)
         for msg in piece:
+            print(msg)
             if(msg>=176):
-                time.sleep((msg-175)*timeunit)
+                time.sleep((msg-175)/100)
             elif(msg>88):
                 fs.noteon(0, msg-88, 100)
             else:
@@ -109,11 +110,16 @@ class Player:
 
 
     
-
+#Takes in any form of decimal encoded midi and converts in to standard form. Can save and play as midis
 class SmpFile:
     def __init__(self, piece):
-        if(self._isOnOnly(piece)):
+        if(self._isMultiNet(piece)):
+            print("Converting piece from MultiNet to OnOff")
+            piece = self._multiNetToOnOff(piece)
+        elif(self._isOnOnly(piece)):
+            print("Converting piece from OnOnly to OnOff")
             piece = self._onOnlyToOnOff(piece)
+
         self.piece = piece
         
 
@@ -138,6 +144,17 @@ class SmpFile:
                     notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
         return notesByTimeUnit
 
+    def _isMultiNet(self, piece):
+        return (len(piece)==2)
+
+    def _multiNetToOnOff(self, piece):
+        onOnlyConverted = []
+        for note,time in zip(piece[0], piece[1]):
+            onOnlyConverted.extend([note,time])
+        return self._onOnlyToOnOff(onOnlyConverted)
+
+
+
     #If there are many 176's right next to each other they can be combined
     def _collapseTimeUnits(self, notesByTimeUnit):
         convertedPiece = []
@@ -152,7 +169,7 @@ class SmpFile:
     
 
     def play(self):
-        Player.playEncoded(self.piece)
+        Player.play(self.piece)
 
 
     def saveMidi(self, path, ticksPerTimeUnit = 16):

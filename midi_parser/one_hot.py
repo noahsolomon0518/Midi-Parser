@@ -1,8 +1,7 @@
 import numpy as np
 import warnings
 import keras
-
-
+from .encoders import OneTrack
 
 
 
@@ -138,12 +137,15 @@ class OneHotEncodeGen(OneHotEncoder):
 
 #Generates one hot encoded samples in form of multinet
 class OneHotEncodeMultiNet(OneHotEncoder):
-    def __init__(self, lookback=30, nClasses=200, startThresh = 20, nClassesNotes = 89, nClassesTimes = 100):
+    def __init__(self, lookback=30, startThresh = 20, octaves = 4, nClassesTimes = 100):
+        self.minNote, self.maxNote = OneTrack.calcMinMaxNote(octaves)
+        nClassesNotes = self.maxNote - self.minNote
         super().__init__(lookback=lookback, nClasses=nClassesTimes + nClassesNotes)
         self.startThresh = startThresh
-        self.nClassesNotes = nClassesNotes
+        self.nClassesNotes = nClassesNotes + 1              #   +1 for waiting time signal
         self.nClassesTimes = nClassesTimes
 
+    
 
 
 
@@ -181,8 +183,11 @@ class OneHotEncodeMultiNet(OneHotEncoder):
         yTimesOH = np.zeros((nSamples, self.nClassesTimes))
         for i in range(nSamples):
             for j, note in enumerate(xNotes[i]):
-                x[i][j][note] = 1
-            ind = np.min([yNotes[i], self.nClassesNotes-1])
+                ind = self.maxNote - self.minNote if note==88 else note - self.minNote 
+                print(note, ind)
+                x[i][j][ind] = 1
+            #ind = np.min([yNotes[i], self.nClassesNotes-1])
+            ind = self.maxNote - self.minNote if yNotes[i]==88 else yNotes[i] - self.minNote 
             yNotesOH[i][ind] = 1
             for j, time in enumerate(xTimes[i]):
                 ind = np.min([time+self.nClassesNotes, self.nClasses-1])

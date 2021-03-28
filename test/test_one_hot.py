@@ -2,9 +2,6 @@ from midi_parser.one_hot import OneHotEncodeAll, OneHotEncodeGen,  OneHotInfo, O
 from midi_parser.encoders import MidiToDecimal
 import unittest
 
-p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset")
-data = p.encode()
-print(data)
 
 oneHotEnc = OneHotEncodeAll()
 encodeGen = OneHotEncodeGen(lookback=100, nClasses=100, evenInds=True)
@@ -13,6 +10,8 @@ class TestOTEncoder(unittest.TestCase):
     
 
     def test_one_hot_info(self):
+        p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset")
+        data = p.encode()
         occurences = OneHotInfo.occurences(data)
         nSamples =OneHotInfo.nSamples(data, 20, 3)
         assert nSamples > 0
@@ -22,6 +21,8 @@ class TestOTEncoder(unittest.TestCase):
         print(occurences)
 
     def test_one_hot_gen(self):
+        p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset")
+        data = p.encode()
         (x,y) = encodeGen.encode(data, 500)
         assert x.shape == (500,100,100)
         assert y.shape == (500,100)
@@ -29,9 +30,9 @@ class TestOTEncoder(unittest.TestCase):
 
 
     def test_one_hot_multi(self):
-        p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset", method = "multi_network")
+        p = MidiToDecimal("C:/Users/noahs/Data Science/Music Generation AI/data/130000_Pop_Rock_Classical_Videogame_EDM_MIDI_Archive[6_19_15]/AMERICANA_FOLK_www.pdmusic.org_MIDIRip/1800s/subset", method = "multi_network", maxOctaves=2)
         data = p.encode()
-        oneHot = OneHotEncodeMultiNet(lookback=100)
+        oneHot = OneHotEncodeMultiNet(lookback=100, octaves=2)
         x,yNotes, yTimes = oneHot.encode(data, 20)
         print("x shape", x.shape)
         print("yNotes shape", yNotes.shape)
