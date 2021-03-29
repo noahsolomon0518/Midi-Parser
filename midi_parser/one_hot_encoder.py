@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 import keras
-from .encoders import OneTrack
 
 
 
@@ -99,7 +98,7 @@ class OneHotEncodeAll(OneHotEncoder):
 
 #startThresh ---> There must be atleast startthresh starting points in a piece to sample from it. Only super necessary for small midis
 class OneHotEncodeGen(OneHotEncoder):
-    def __init__(self, lookback=30, nClasses=200, startThresh = 20, evenInds = False):
+    def __init__(self, lookback, nClasses, startThresh, evenInds):
         super().__init__(lookback=lookback, nClasses=nClasses)
         self.startThresh = startThresh
         self.evenInds = evenInds
