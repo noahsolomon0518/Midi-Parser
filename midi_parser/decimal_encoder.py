@@ -315,7 +315,6 @@ class OneTrack:
             currentNoteCopy = currentNote.copy()
             if(self.convertToC):
                 currentNoteCopy.note = self._convertNoteToC(currentNoteCopy.note) 
-            print("DT", deltaTime, self.tpb)
             currentNoteCopy.time = self._timeConversion(deltaTime)
             self.notesRel.append(currentNoteCopy)
 
