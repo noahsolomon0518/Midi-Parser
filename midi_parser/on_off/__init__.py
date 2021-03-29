@@ -1,0 +1,1 @@
+from .on_off_encoder import MidiToDecimalOnOff

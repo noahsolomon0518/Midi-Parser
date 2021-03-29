@@ -4,4 +4,4 @@ Created on Tue Feb 23 13:53:16 2021
 
 @author: noahs
 """
-from . import encoders
+from .sampler import Sampler, Player

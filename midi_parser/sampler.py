@@ -91,7 +91,8 @@ def encodeFromOneHot(generated):
 
 class Player:
     @staticmethod
-    def play(piece):
+    def play(piece, smallestTimeUnit = 1/32, tempo = 120):
+        timeUnitSeconds =  (smallestTimeUnit/(1/4))*(60/tempo)     #How many beats in smallest time unit
         fs = fluidsynth.Synth()
         fs.start()
         sfid = fs.sfload(sf2)
@@ -99,7 +100,7 @@ class Player:
         for msg in piece:
             print(msg)
             if(msg>=176):
-                time.sleep((msg-175)/100)
+                time.sleep((msg-175)*timeUnitSeconds)
             elif(msg>88):
                 fs.noteon(0, msg-88, 100)
             else:

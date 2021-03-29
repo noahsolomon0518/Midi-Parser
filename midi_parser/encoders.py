@@ -130,8 +130,6 @@ class OneTrack:
         self.mido = mido
         self.maxOctaves = maxOctaves
         self.minNote, self.maxNote = OneTrack.calcMinMaxNote(maxOctaves)
-        print("min Note", self.minNote)
-        print("max Note", self.maxNote)
         self.convertToC = convertToC
         self.scales = scales
         self.microSecsPerBeat = OneTrack.DEFAULT_MICRO_SECS_PER_BEAT

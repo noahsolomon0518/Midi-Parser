@@ -14,8 +14,7 @@ import os
 import warnings
 from mido import MidiFile
 
-sf2 = os.path.abspath(
-    "C:/Users/noahs/Local Python Libraries/soundfonts/piano.sf2")
+sf2 = os.path.abspath("C:/Users/noahs/Local Python Libraries/soundfonts/piano.sf2")
 
 '''
 ###
@@ -67,7 +66,7 @@ class MidiToDecimal:
         3. MidiToDecimal._OTEncode -> encodes all OneTrack objects to decimal encoded list
                                       !must add _OTEncodeOne(oneTrack) to implementation
     '''
-    def __init__(self, folder, maxOctaves = 4, debug=False, r=True, convertToC = True,  scales = "both"):
+    def __init__(self, folder,  maxOctaves = 4, debug=False, r=True, convertToC = True,  scales = "both"):
         self.convertToC = convertToC
         self.maxOctaves = maxOctaves
         self.scales = scales
@@ -92,7 +91,7 @@ class MidiToDecimal:
         self._dbg("Converting midos to OneTracks")
         oneTracks = self._midosToOT(midos)
         self._dbg("OTEncoding OneTracks")
-        encoded = self._OTEncodeAll(oneTracks)
+        encoded = self._OTEncode(oneTracks)
         self._dbg("Encoded "+ str(len(encoded))+ " tracks")
         if(len(encoded)==0):
             warnings.warn("No valid midis")
@@ -108,35 +107,250 @@ class MidiToDecimal:
     def _midosToOT(self, midos):
         oneTracks = []
         for mido in midos:
-            ot = self._convertMidoToOneTrack(mido)
-            assert type(ot) == OneTrack
+            ot = self._initOneTrack(mido)
+            assert isinstance(ot, OneTrack)
             if(ot.notesRel != [] and ot != None):           #Returns None if scales specified and midi does not have key
                 oneTracks.append(ot)
-
-
         if(not self.debug):
             return oneTracks
         self.oneTracks = oneTracks
         return oneTracks
 
-    def _OTEncodeAll(self, oneTracks):
-        allOTEncoded = []
-        for oneTrack in oneTracks:
-            OTEncoded = self._OTEncodeOne(oneTracks)
+    def _OTEncode(self, oneTracks):
+        oTEncoder = self._initOTEncoder(oneTracks)
+        assert isinstance(oTEncoder, OTEncoder)
+        OTEncoded = oTEncoder.encodedOTs
         if(not self.debug):
-            return allOTEncoded
-        self.encoded = allOTEncoded
-        return allOTEncoded
+            return OTEncoded
+        self.encoded = OTEncoded
+        return OTEncoded
 
-    #Interface functions that must be defined
-    #Should return some form of a OneTrack
-    def _convertMidoToOneTrack(self, mido):
-        pass
-
-    #Should return list of decimal encodings for each midi
-    def _OTEncodeOne(self, oneTrack):
-        pass
+    #Should return the OTEncoder
+    def _initOTEncoder(self, OTs):
+        raise NotImplementedError("Must define OTEncoder that will be used")
+    
+    def _initOneTrack(self, mido):
+        raise NotImplementedError("Must define OneTrack that will be used")
+    
 
     def _dbg(self, msg):
         if(self.debug):
             print(msg)
+
+
+
+
+
+
+
+'''
+##
+--Note--
+##
+
+
+--Purpose--
+Used for recording meaningful data for each note attained from mido object. OneTrack class is meant to be filled with
+many Notes
+
+--Parameters--
+note: respective note ranging from 0-87
+time: delta time relative to previous notes. In terms of ticks.
+type: can be "note_on", "note_off", or "time_unit"
+velocity: soley used to determine if "note_on" is actually "note_off" (note on with 0 velocity which is common in midi files)
+'''
+
+
+class Note:
+    def __init__(self, note, time, type, velocity):
+        self.note = note
+        self.time = time
+        self.velocity = velocity
+        if(velocity == 0):
+            self.type = "note_off"
+        else:
+            self.type = type
+
+    def copy(self):
+        return Note(self.note, self.time, self.type, self.velocity)
+
+
+
+
+
+'''
+##
+--OneTrack
+##
+
+--Purpose--
+Since midis have multiple tracks, one for each channel, in order to get all notes at played correctly synchronously,
+the track must be converted to absolutes time, then back to relative time. OneTrack records does this, in addition to 
+keeping track of important information such as ticks per beat and key. 
+
+--Parameters--
+mido: mido object to construct OneTrack
+convertToC: whether or not to convert midi to C. If no key then will not be valid
+scales: if want major/minor or both scales. If no key, then will not be valid
+'''
+
+
+
+class OneTrack:
+
+    MIDDLE_C = 60
+    NOTES_PER_OCTAVE = 12
+    DEFAULT_MICRO_SECS_PER_BEAT = 50000
+    halfStepsAboveC = {
+        "C":0,
+        "B#":0,
+        "Db":1,
+        "C#":1,
+        "D":2,
+        "Eb":3,
+        "D#":3,
+        "Fb":4,
+        "E":4,
+        "E#":5,
+        "F":5,
+        "F#":6,
+        "Gb":6,
+        "G":7,
+        "G#":8,
+        "Ab":8,
+        "A":9,
+        "A#":10,
+        "Bb":10,
+        "B":11
+    }
+
+    def __init__(self, mido, convertToC = True, scales = "both", maxOctaves = 4):
+        assert maxOctaves in [2,4,6,8]
+        self.mido = mido
+        self.maxOctaves = maxOctaves
+        self.minNote, self.maxNote = OneTrack.calcMinMaxNote(maxOctaves)
+        self.convertToC = convertToC
+        self.scales = scales
+        self.microSecsPerBeat = OneTrack.DEFAULT_MICRO_SECS_PER_BEAT
+        self.key = None
+        self.tpb = mido.ticks_per_beat
+        self.notesAbs = []
+        self.notesRel = []
+        self._extractNotesAbs()
+
+    
+
+
+        #Only does full conversion if valid. Otherwise self.noteRel=[] and is not parsed
+        if(self._isValid()):
+            self.needKey = (self.convertToC == True or self.scales != "both")
+            self.halfStepsAboveC = OneTrack.halfStepsAboveC[self.key.replace("m", "")]
+            self.halfStepsBelowC = 14 - OneTrack.halfStepsAboveC[self.key.replace("m", "")]
+            self._convertToNotesRel()
+            self._applyMinMaxOctave()
+
+    
+    #Checks if midi file has key information which is needed for key change
+    def _isValid(self):
+        if(self.key==None and (self.convertToC == True or self.scales != "both")):
+            return False
+        if(self.scales=="major" and "m" in self.key):
+            return False
+        if(self.scales=="minor" and "m" not in self.key):
+            return False
+        return True
+
+
+    @staticmethod
+    def calcMinMaxNote(maxOctaves):
+        maxNote = OneTrack.MIDDLE_C + (maxOctaves/2) * OneTrack.NOTES_PER_OCTAVE
+        minNote = OneTrack.MIDDLE_C - (maxOctaves/2) * OneTrack.NOTES_PER_OCTAVE
+        return int(minNote), int(maxNote)
+
+
+    def _extractNotesAbs(self):
+
+        for track in self.mido.tracks:
+            _time = 0
+            for msg in track:
+            
+                if(msg.type == "key_signature"):
+                    self.key = msg.key
+
+                _time += msg.time
+                if(msg.type in ["note_on","note_off"]):
+                    self.notesAbs.append(Note(msg.note,
+                                              _time,
+                                              msg.type,
+                                              msg.velocity))
+
+        self.notesAbs.sort(key=lambda x: x.time)
+
+    #Input notesrel and changes note take in account of min max octave
+    def _minMaxOctaveConvert(self, note):
+        if(note.note>self.maxNote):
+            octavesToShift = (((note.note-self.maxNote)//OneTrack.NOTES_PER_OCTAVE) + 1)
+            note.note = int(note.note - 12 * octavesToShift)
+        elif(note.note<self.minNote):
+            octavesToShift = (((self.minNote - note.note)//OneTrack.NOTES_PER_OCTAVE) + 1)
+            note.note = int(note.note + 12 * octavesToShift)
+
+    #After notes converted to relative function is used to make sure every note is inside min-max note range
+    def _applyMinMaxOctave(self):
+        for note in self.notesRel:
+            self._minMaxOctaveConvert(note)
+            
+
+
+    def _convertToNotesRel(self):
+        notesAbs = self.notesAbs.copy()
+        firstNote = notesAbs[0]
+        firstNote.time = 0
+        self.notesRel.append(firstNote)
+
+        for i in range(len(notesAbs[1:])-1):
+            currentNote = notesAbs[i+1]
+            previousNote = notesAbs[i]
+            deltaTime = currentNote.time - previousNote.time            
+            currentNoteCopy = currentNote.copy()
+            if(self.convertToC):
+                currentNoteCopy.note = self._convertNoteToC(currentNoteCopy.note) 
+            print("DT", deltaTime, self.tpb)
+            currentNoteCopy.time = self._timeConversion(deltaTime)
+            self.notesRel.append(currentNoteCopy)
+
+
+    def _convertNoteToC(self, note):
+        newNote = note - self.halfStepsBelowC
+        if((note>87 and newNote<88) or newNote<0):
+            newNote = note + self.halfStepsAboveC
+        return newNote
+
+
+    #Can define custom time conversions in different implementations
+    def _timeConversion(self, _time):
+        return _time
+    '''
+    def _convertTicksToMSTimeUnits(self, ticks):
+        msTimeUnits = (ticks*(1/self.tpb)*self.microSecsPerBeat)//1000
+        return int(max([msTimeUnits, 1]))   #Ensures atleast 1 timeunit
+    '''
+
+
+
+
+class OTEncoder:
+    def __init__(self, oneTracks):
+        self.encodedOTs = []
+        self._encodeAll(oneTracks)
+    
+
+    def _encodeAll(self, oneTracks):
+        for track in oneTracks:
+            encodedOT = self._encodeOneMido(track)
+            if (encodedOT != None):
+                self.encodedOTs.append(encodedOT)
+            
+
+    def _encodeOneMido(self, track):
+        pass
