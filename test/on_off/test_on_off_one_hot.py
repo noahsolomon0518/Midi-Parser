@@ -13,15 +13,21 @@ encodedOTs = encoderOnOff.encoded
 
 
 
-class TestOTEncoderOnOff(unittest.TestCase):
+class TestOneHotEncoderOnOff(unittest.TestCase):
     
 
     def test_encoding(self):
         ohe = OneHotEncoderOnOff()
         (x,y) = ohe.encode(encodedOTs, 500)
+        self.assertEqual(len(x), 500)
+        self.assertEqual(len(y), 500)
         print(len(x))
         print(len(y))
 
+
+
+
+    
         
     
 

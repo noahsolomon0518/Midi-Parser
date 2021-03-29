@@ -1,1 +1,2 @@
 from .on_only_encoder import MidiToDecimalOnOnly
+from .on_only_one_hot import OneHotEncoderOnOnly
