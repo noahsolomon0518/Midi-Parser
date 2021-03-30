@@ -26,7 +26,6 @@ class OTEncoderOnOff(OTEncoder):
             return encodedOT
 
     def _encodeOneNote(self, note):
-        print(note.note, note.time)
         waitTime = []
         waitTime = [175+note.time] if note.time > 0 else []
         if(note.type == "note_on"):
