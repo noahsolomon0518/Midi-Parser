@@ -162,9 +162,10 @@ velocity: soley used to determine if "note_on" is actually "note_off" (note on w
 
 
 class Note:
-    def __init__(self, note, time, type, velocity):
+    def __init__(self, note, time, type, velocity, instrument):
         self.note = note
         self.time = time
+        self.instrument = instrument
         self.velocity = velocity
         if(velocity == 0):
             self.type = "note_off"
@@ -172,7 +173,7 @@ class Note:
             self.type = type
 
     def copy(self):
-        return Note(self.note, self.time, self.type, self.velocity)
+        return Note(self.note, self.time, self.type, self.velocity, self.instrument)
 
 
 
@@ -272,17 +273,23 @@ class OneTrack:
 
         for track in self.mido.tracks:
             _time = 0
+            instrument = 0
             for msg in track:
-            
+                if(msg.type == "program_change"):
+                    instrument = msg.program
+
                 if(msg.type == "key_signature"):
                     self.key = msg.key
 
                 _time += msg.time
+                
                 if(msg.type in ["note_on","note_off"]):
                     self.notesAbs.append(Note(msg.note,
                                               _time,
                                               msg.type,
-                                              msg.velocity))
+                                              msg.velocity, 
+                                              instrument))
+
 
         self.notesAbs.sort(key=lambda x: x.time)
 

@@ -12,7 +12,7 @@ class OneTrackOnOnly(OneTrackVanilla):
     def _calculateNoteOns(self):
         for i, note in enumerate(self.notesRel):
             if(note.time>0):
-                self.notesTimed.append(Note(88, note.time, "time_unit", 80))
+                self.notesTimed.append(Note(88, note.time, "time_unit", 0, 0 ))
             if(note.type == "note_on"):
                 noteNum = note.note
                 dt = 0
@@ -21,7 +21,7 @@ class OneTrackOnOnly(OneTrackVanilla):
                         dt+=nextNote.time 
                         break
                     dt+=nextNote.time 
-                self.notesTimed.append(Note(note.note, dt, "note_on", 80))
+                self.notesTimed.append(Note(note.note, dt, "note_on", note.velocity, note.instrument))
 
 class OTEncoderOnOnly(OTEncoder):
     def __init__(self, oneTracks):

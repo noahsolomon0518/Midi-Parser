@@ -1,2 +1,2 @@
-from .multi_net_encoder import MidiToDecimalMultiNet
-from .multi_net_one_hot import OneHotEncoderMultiNet
+from .encapsul_net_encoder import MidiToDecimalEncapsulNet
+from .encapsul_net_one_hot import OneHotEncoderEncapsulNet
