@@ -114,13 +114,16 @@ class Player:
 #Takes in any form of decimal encoded midi and converts in to standard form. Can save and play as midis
 class SmpFile:
     def __init__(self, piece):
-        if(self._isMultiNet(piece)):
+        if(self._isEncapsulNet(piece)):
+            print("Converting piece from EncapsulNet to OnOff")
+            piece = self._encapsulNetToOnOff(piece)
+        elif(self._isMultiNet(piece)):
             print("Converting piece from MultiNet to OnOff")
             piece = self._multiNetToOnOff(piece)
         elif(self._isOnOnly(piece)):
             print("Converting piece from OnOnly to OnOff")
             piece = self._onOnlyToOnOff(piece)
-
+        
         self.piece = piece
         
 
@@ -152,6 +155,19 @@ class SmpFile:
         onOnlyConverted = []
         for note,time in zip(piece[0], piece[1]):
             onOnlyConverted.extend([note,time])
+        return self._onOnlyToOnOff(onOnlyConverted)
+
+    def _isEncapsulNet(self, piece):
+        return (len(piece)==3)
+    
+    def _encapsulNetToOnOff(self, piece):
+        timeUnit = max(piece[0])
+        onOnlyConverted = []
+        for note,time,octave in zip(piece[0], piece[1], piece[2]):
+            if(note == timeUnit):
+                onOnlyConverted.extend([88,time])
+            else:
+                onOnlyConverted.extend([12*octave + note,time])
         return self._onOnlyToOnOff(onOnlyConverted)
 
 

@@ -18,13 +18,10 @@ class TestOTEncoderOnOnly(unittest.TestCase):
     
 
     def test_lengths(self):
-        
-        print(encodedOTs)
-        self.assertGreater(len(encodedOTs), 0)
-        for OT in encodedOTs:
-            self.assertGreater(len(OT), 0)
-            for note in OT:
-                self.assertGreater(note, 0)
+        for piece in encodedOTs:
+            print(len(piece[0]))
+
+
   
         
         

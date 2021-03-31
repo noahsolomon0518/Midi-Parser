@@ -18,10 +18,10 @@ class OneHotEncoderEncapsulNet(OneHotEncoder):
         self.minNote, self.maxNote = OneTrack.calcMinMaxNote(octaves)
         nClassesNotes = 12
         self.nClassesOctaves = int(5+octaves/2)
-        super().__init__(lookback=lookback, nClasses=nClassesTimes + nClassesNotes + self.nClassesOctaves)
         self.startThresh = startThresh
         self.nClassesNotes = nClassesNotes + 1              #   +1 for waiting time signal
         self.nClassesTimes = nClassesTimes
+        super().__init__(lookback=lookback, nClasses=nClassesTimes + nClassesNotes + self.nClassesOctaves)
 
     
 
@@ -67,7 +67,7 @@ class OneHotEncoderEncapsulNet(OneHotEncoder):
 
         for i in range(nSamples):
             for j, note in enumerate(xNotes[i]):
-                ind = self.maxNote - self.minNote if note==88 else note - self.minNote 
+                ind = 12 if note==88 else note
                 x[i][j][ind] = 1
             ind = 12 if yNotes[i]==88 else yNotes[i]
             yNotesOH[i][ind] = 1
