@@ -5,80 +5,70 @@ import numpy as np
 
 '''
 
-This OneHotEncoder takes the set of pieces which each have a note list and time list. Notes can be encoded to a vector
-of length up to 88, then the times are encoded on the same vector adding a length of choice to it. This one hot encoder
-is used with a LSTM that uses previous notes/times to predict a note, then based on that predict a time. 
-
-TODO: Combine functionality with OneHotEncodeEncapsulNet
+Lookback should be bigger for this implementation
 
 '''
 
+
 class OneHotEncoderContinueNet(OneHotEncoder):
-    def __init__(self, lookback=30, startThresh = 20, octaves = 4, nClassesTimes = 100):
+    def __init__(self, lookback=60, startThresh=20, octaves=4):
+        self.nClassesNotes = octaves*12
+        self.nClassesContinues = self.nClassesNotes
         self.minNote, self.maxNote = OneTrack.calcMinMaxNote(octaves)
-        nClassesNotes = 12
-        self.nClassesOctaves = int(5+octaves/2)
         self.startThresh = startThresh
-        self.nClassesNotes = nClassesNotes + 1              #   +1 for waiting time signal
-        self.nClassesTimes = nClassesTimes
-        super().__init__(lookback=lookback, nClasses=nClassesTimes + nClassesNotes + self.nClassesOctaves)
-
-    
-
-
+        super().__init__(lookback=lookback, nClasses=2*self.nClassesNotes)
 
     def encode(self, sequences, n):
-        xNotes,yNotes, xTimes,yTimes, xOctaves, yOctaves = self._randInds(sequences, n)
-        return self.oneHotEncode(xNotes,yNotes, xTimes,yTimes, xOctaves, yOctaves)
+        xNotes, yNotes, xTimes, yTimes = self._randInds(sequences, n)
+        return self.oneHotEncode(xNotes, yNotes, xTimes, yTimes)
 
     def _randInds(self, sequences, n):
         xNotes = []
         yNotes = []
-        xTimes = []
-        yTimes = []
-        xOctaves = []
-        yOctaves = []
+        xContinues = []
+        yContinues = []
         for i in range(n):
-            pieceInd = np.random.randint(len(sequences[0]))
-            pieceNotes = sequences[pieceInd][0]
-            pieceTimes = sequences[pieceInd][1]
-            pieceOctaves = sequences[pieceInd][2]
-            startRange = range(len(pieceNotes) - (self.lookback+1))
-            if(len(startRange)>self.startThresh):
+            pieceInd = np.random.randint(len(sequences))
+            piece = np.array(sequences[pieceInd])
+            startRange = range(len(piece) - (self.lookback+1))
+            if(len(startRange) > self.startThresh):
                 start = np.random.choice(startRange)
                 end = start+self.lookback
-                xNotes.append(pieceNotes[start:end])
-                yNotes.append(pieceNotes[end])
-                xTimes.append(pieceTimes[start:end])
-                yTimes.append(pieceTimes[end])
-                xOctaves.append(pieceOctaves[start:end])
-                yOctaves.append(pieceOctaves[end])
-        return xNotes,yNotes, xTimes,yTimes, xOctaves, yOctaves
-    
+                xNotes.append(list(piece[start:end, 0]))
+                yNotes.append(list(piece[end, 0]))
+                xContinues.append(list(piece[start:end, 1]))
+                yContinues.append(list(piece[end, 1]))
+            
+        return xNotes, yNotes, xContinues, yContinues
 
-    def oneHotEncode(self, xNotes,yNotes, xTimes,yTimes, xOctaves, yOctaves):
-        nSamples = len(xNotes)
-        lookback = len(xNotes[0])
-        nClasses = self.nClasses
-        x = np.zeros((nSamples, lookback, nClasses))
-        yNotesOH = np.zeros((nSamples, self.nClassesNotes))
-        yTimesOH = np.zeros((nSamples, self.nClassesTimes))
-        yOctavesOH = np.zeros((nSamples, self.nClassesOctaves))
+    def oneHotEncode(self, xNotes, yNotes, xContinues, yContinues):
+        nSamples=len(xNotes)
+        print(xNotes)
+        lookback=self.lookback
+        nClasses=self.nClasses
+        x=np.zeros((nSamples, lookback, nClasses))
+        yNotesOH=np.zeros((nSamples, self.nClassesNotes))
+        yContinuesOH=np.zeros((nSamples, self.nClassesContinues))
+
 
         for i in range(nSamples):
-            for j, note in enumerate(xNotes[i]):
-                ind = 12 if note==88 else note
-                x[i][j][ind] = 1
-            ind = 12 if yNotes[i]==88 else yNotes[i]
-            yNotesOH[i][ind] = 1
-            for j, time in enumerate(xTimes[i]):
-                ind = np.min([time+self.nClassesNotes, self.nClasses-1])
-                x[i][j][ind] = 1
-            ind = np.min([yTimes[i], self.nClassesTimes-1])
-            yTimesOH[i][ind] = 1
-            for j, octave in enumerate(xOctaves[i]):
-                ind = np.min([octave+self.nClassesNotes+self.nClassesTimes, self.nClasses-1])
-                x[i][j][ind] = 1
-            ind = np.min([yOctaves[i], self.nClassesOctaves-1])
-            yOctavesOH[i][ind] = 1
-        return x,yNotesOH,yTimesOH, yOctavesOH
+            for j, timeUnit in enumerate(xNotes[i]):
+                for note in timeUnit:
+                    ind = note-self.minNote
+                    x[i][j][ind]=1
+
+            for note in yNotes[i]:
+                ind = note-self.minNote
+                yNotesOH[i][ind]=1
+
+            for j, timeUnit in enumerate(xContinues[i]):
+                for note in timeUnit:
+                    ind = self.nClassesNotes + note - self.minNote
+                    x[i][j][ind]=1
+
+            for note in yContinues[i]:
+                ind = note - self.minNote
+                yContinuesOH[i][ind]=1
+
+
+        return x, yNotesOH, yContinuesOH
