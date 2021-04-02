@@ -43,7 +43,6 @@ class OneHotEncoderContinueNet(OneHotEncoder):
 
     def oneHotEncode(self, xNotes, yNotes, xContinues, yContinues):
         nSamples=len(xNotes)
-        print(xNotes)
         lookback=self.lookback
         nClasses=self.nClasses
         x=np.zeros((nSamples, lookback, nClasses))

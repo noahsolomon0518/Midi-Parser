@@ -85,7 +85,144 @@ def encodeFromOneHot(generated):
 '''
 
 
+#Abstract class for piece
+#Piece only records timing and notes
+#2 purposes include storing piece and converting to standard format
+class Piece:
+    def __init__(self, piece, smallestTimeUnit):
+        self.smallestTimeUnit = smallestTimeUnit
+        piece = self.convertToOnOff(piece)
+        self.piece = self._removeDup(piece)
 
+
+    #If piece generates multiple note of the same pitch played at same time
+    #This function removes them
+    def _removeDup(self, piece):
+        for i, note in enumerate(piece):
+            if(note<176):
+                back = 1
+                while(i-back>=0 and piece[i-back]<176):
+                    if(note == piece[i-back]):
+                        del piece[i]
+                        break
+                    back+=1
+        return piece
+
+    #Must define convertToOnOff in child classes
+    def convertToOnOff(self, piece):
+        raise NotImplementedError("Must define convertToOnOff function.")
+
+    def play(self, tempo = 120):
+        """
+        Plays piece after converted to OnOff form
+
+        Parameters
+        ----------
+        tempo: int
+            Tempo in beats per minute
+        """
+        Player.play(self.piece, self.smallestTimeUnit, tempo)
+
+    def save(self, path, tempo = 120):
+        """
+        Saves piece as midi
+
+        Parameters
+        ----------
+        path: str
+            Path at which midi will be saved in. Add extension .mid
+        tempo: int
+            Tempo in beats per minute
+        """
+        timeUnitSeconds =  (self.smallestTimeUnit/(1/4))*(60/tempo)
+        mid = MidiFile()
+        track = MidiTrack()
+        mid.tracks.append(track)
+        for i, message in enumerate(self.piece):
+            if(i>0 and self.piece[i-1]>175):
+                dt = (self.piece[i-1] - 175) * timeUnitSeconds
+            else:
+                dt = 0
+            self._addMessage(dt, message, track)
+        mid.save(path)
+
+    def _addMessage(self, dt, message, track):
+        #If note off
+        if(message<88):
+            track.append(Message('note_off', note=message, velocity=127, time=dt))
+        elif(message<176):
+            track.append(Message('note_on', note=message-88, velocity=127, time=dt))
+
+
+
+class OnOffPiece(Piece):
+    ##Standard format for pieces
+
+    #NoteOns -> 88 + <pitch>
+    #NoteOffs -> 0 + <pitch>
+    #Wait Time -> 175 + <number of time units>
+    
+
+    def __init__(self, piece, smallestTimeUnit):
+        super().__init__(piece, smallestTimeUnit)
+
+    #Already in standard form
+    def convertToOnOff(self, piece):
+        return piece
+
+
+
+class OnOnlyPiece(Piece):
+
+    #Each note broken down into:
+    # <pitch number> <time units player for>
+    # 88 is waiting time unit
+
+    def __init__(self, piece, smallestTimeUnit):
+        super().__init__(piece, smallestTimeUnit)
+
+    
+    def convertToOnOff(self, piece):
+        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+100
+        notesByTimeUnit = self._calcNoteOnNoteOffs(piece, totalTimeUnits)
+        convertedPiece = self._collapseTimeUnits(notesByTimeUnit)
+        return convertedPiece
+
+    
+
+    def _calcNoteOnNoteOffs(self, piece, totalTimeUnits):
+        notesByTimeUnit = [[] for i in range(totalTimeUnits)]
+        currentTimeUnit = 0
+        for i,evt in enumerate(piece):
+            if(i%2 == 0):
+                if(evt==88):
+                    currentTimeUnit += piece[i+1]
+                else:
+                    notesByTimeUnit[currentTimeUnit].append(88+evt)
+                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
+        return notesByTimeUnit
+
+    #If there are many 176's right next to each other they can be combined
+    def _collapseTimeUnits(self, notesByTimeUnit):
+        convertedPiece = []
+        for timeUnit in notesByTimeUnit:
+            if(len(timeUnit)==0 and len(convertedPiece)>0):
+                convertedPiece[-1]+=1
+            else:
+                for note in timeUnit:
+                    convertedPiece.append(note)
+                convertedPiece.append(176)    #Each timeunit represents 176
+        return convertedPiece
+
+class MultiNetPiece(OnOnlyPiece):
+    def __init__(self, piece, smallestTimeUnit):
+        super().__init__(piece, smallestTimeUnit)
+
+    def convertToOnOff(self, piece):
+        onOnlyConverted = []
+        for note,time in zip(piece[0], piece[1]):
+            onOnlyConverted.extend([note,time])
+        return OnOnlyPiece.convertToOnOff(self, onOnlyConverted)
 
 
 
@@ -109,53 +246,7 @@ class Player:
 
 
 
-
-    
-#Takes in any form of decimal encoded midi and converts in to standard form. Can save and play as midis
-class SmpFile:
-    def __init__(self, piece):
-        if(self._isEncapsulNet(piece)):
-            print("Converting piece from EncapsulNet to OnOff")
-            piece = self._encapsulNetToOnOff(piece)
-        elif(self._isMultiNet(piece)):
-            print("Converting piece from MultiNet to OnOff")
-            piece = self._multiNetToOnOff(piece)
-        elif(self._isOnOnly(piece)):
-            print("Converting piece from OnOnly to OnOff")
-            piece = self._onOnlyToOnOff(piece)
-        
-        self.piece = piece
-        
-
-    def _isOnOnly(self, piece):
-        return (max([piece[i] for i in range(len(piece)) if i%2==0]) < 176)
-
-    def _onOnlyToOnOff(self, piece):
-        totalTimeUnits = sum([piece[i+1] for i in range(len(piece)) if i%2 == 0 and piece[i]==88])+100
-        notesByTimeUnit = self._calcNoteOnNoteOffs(piece, totalTimeUnits)
-        convertedPiece = self._collapseTimeUnits(notesByTimeUnit)
-        return convertedPiece
-
-    def _calcNoteOnNoteOffs(self, piece, totalTimeUnits):
-        notesByTimeUnit = [[] for i in range(totalTimeUnits)]
-        currentTimeUnit = 0
-        for i,evt in enumerate(piece):
-            if(i%2 == 0):
-                if(evt==88):
-                    currentTimeUnit += piece[i+1]
-                else:
-                    notesByTimeUnit[currentTimeUnit].append(88+evt)
-                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
-        return notesByTimeUnit
-
-    def _isMultiNet(self, piece):
-        return (len(piece)==2)
-
-    def _multiNetToOnOff(self, piece):
-        onOnlyConverted = []
-        for note,time in zip(piece[0], piece[1]):
-            onOnlyConverted.extend([note,time])
-        return self._onOnlyToOnOff(onOnlyConverted)
+'''
 
     def _isEncapsulNet(self, piece):
         return (len(piece)==3)
@@ -170,49 +261,10 @@ class SmpFile:
                 onOnlyConverted.extend([12*octave + note,time])
         return self._onOnlyToOnOff(onOnlyConverted)
 
-
-
-    #If there are many 176's right next to each other they can be combined
-    def _collapseTimeUnits(self, notesByTimeUnit):
-        convertedPiece = []
-        for timeUnit in notesByTimeUnit:
-            if(len(timeUnit)==0 and len(convertedPiece)>0):
-                convertedPiece[-1]+=1
-            else:
-                for note in timeUnit:
-                    convertedPiece.append(note)
-                convertedPiece.append(176)    #Each timeunit represents 176
-        return convertedPiece
-    
-
-    def play(self):
-        Player.play(self.piece)
-
-
-    def saveMidi(self, path, ticksPerTimeUnit = 16):
-        mid = MidiFile()
-        track = MidiTrack()
-        mid.tracks.append(track)
-        for i, message in enumerate(self.piece):
-            if(i>0 and self.piece[i-1]>175):
-                dt = (self.piece[i-1] - 175) * ticksPerTimeUnit
-            else:
-                dt = 0
-            self._addMessage(dt, message, track)
-        mid.save(path)
-
-    def _addMessage(self, dt, message, track):
-        #If note off
-        if(message<88):
-            track.append(Message('note_off', note=message, velocity=127, time=dt))
-        elif(message<176):
-            track.append(Message('note_on', note=message-88, velocity=127, time=dt))
-
-
+'''
 
     
-
-
+    
 
 
     
@@ -222,42 +274,38 @@ class SmpFile:
 
 
 
-#Used for testing music generation capabilities of networks
-#Also can save as SmpFile (MusicSampler without some atrributes)
 
-class Sampler:
+
+class Generator:
     
-    def __init__(self, model, xTrain):
+    def __init__(self, model, xTrain, smallestTimeUnit):
+        self.smallestTimeUnit = smallestTimeUnit
         self.model = model
         self.maxLen = len(xTrain[0])
         self.xTrain = xTrain
         self.generated = []
-    
-        
-        
-    
-    
-    
-    
-    
-    #Generates in the form of one hot encoded vectors then converted to decimal
-    #to be stored and played easily. 
-    def generate(self, temp, nNotes = 500, save = False, fp = None):
-        if(save):
-            assert fp != None
-        print("---Generating Piece---")
-        if(len(self.model.output)==1):
-            piece = self._generateReg(temp, nNotes)
-        elif(len(self.model.output)==2):
-            piece = self._generateMulti(temp, nNotes)
-        print("Piece generated...")
-        self.generated.append(SmpFile(piece))           
-        if(save):
-            saveSmp(piece, fp)
-        return SmpFile(piece)
+
+    def generate(self, temp, nNotes):
+        generated = self._generate(temp, nNotes)
+        self.generated.append(generated)
+        return generated
+
+    def _generate(self, temp, nNotes):
+        raise NotImplementedError("_generate function must be implemented")
     
 
-    def _generateReg(self, temp, nNotes):
+    def _getPriorNotes(self, generated):
+        return np.expand_dims(generated[-self.maxLen:], axis = 0)
+        
+    
+        
+        
+
+class OnOffGenerator(Generator):
+    def __init__(self, model, xTrain, smallestTimeUnit):
+        super().__init__(model,xTrain, smallestTimeUnit)
+    
+    def _generate(self, temp, nNotes = 500):
         piece = []
         generated = choice(self.xTrain)
         
@@ -267,31 +315,46 @@ class Sampler:
             argMax = sample(preds, temp)
             piece.append(argMax)
             generated = np.concatenate([generated,preds])
-            self._printProgress(i, nNotes)
+        piece = self._convertToPieceObj(piece)
         return piece
+    
+    def _convertToPieceObj(self, piece):
+        return OnOffPiece(piece, self.smallestTimeUnit)
+    
 
 
-    #Does not work with gpu :(
-    def _generateMulti(self, temp, nNotes):
-        with tf.device('/cpu:0'):
-            piece = []
-            generated = choice(self.xTrain)
 
-            for i in range(nNotes):
-                priorNotes = self._getPriorNotes(generated)
-                predNotes, predTimes = self.model.predict(priorNotes)
-                argmaxNotes = sample(predNotes[0], temp)
-                argmaxTimes = sample(predTimes[0], temp)
-                piece.extend([argmaxNotes,argmaxTimes])
-                preds = np.concatenate([predNotes, predTimes], axis = 1)
-                generated = np.concatenate([generated,preds])
-                self._printProgress(i, nNotes)
-            return piece
+#Same exact process as OnOffGenerator except for the type of the piece
+class OnOnlyGenerator(OnOffGenerator):
+    def __init__(self, model, xTrain, smallestTimeUnit):
+        super().__init__(model,xTrain, smallestTimeUnit)
+    
 
-    def _printProgress(self, i, nNotes):
-        print("Progress: "+str(i*100/(nNotes))+"%", end = "\r")
+    def _convertToPieceObj(self, piece):
+        return OnOnlyPiece(piece, self.smallestTimeUnit)
+    
+    
 
-    def _getPriorNotes(self, generated):
-        return np.expand_dims(generated[-self.maxLen:], axis = 0)
+
+class MultiNetGenerator(Generator):
+    def __init__(self, model, xTrain, smallestTimeUnit):
+        super().__init__(model,xTrain, smallestTimeUnit)
+
+    def _generate(self, temp, nNotes):
+        piece = []
+        generated = choice(self.xTrain)
+
+        for i in range(nNotes):
+            priorNotes = self._getPriorNotes(generated)
+            predNotes, predTimes = self.model.predict(priorNotes)
+            argmaxNotes = sample(predNotes[0], temp)
+            argmaxTimes = sample(predTimes[0], temp)
+            piece.extend([argmaxNotes,argmaxTimes])
+            preds = np.concatenate([predNotes, predTimes], axis = 1)
+            generated = np.concatenate([generated,preds])
+        return MultiNetPiece(piece, self.smallestTimeUnit)
+
+
+
 
    

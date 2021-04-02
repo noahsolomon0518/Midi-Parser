@@ -29,7 +29,6 @@ class OTEncoderContinueNet(OTEncoderOnOnly):
 
     def _encodeOneMido(self, oneTrack):
         totalTimeUnits = self._calculateTotalTimeUnits(oneTrack)
-        print(totalTimeUnits)
         encodedOT = [[[],[]] for  timeUnit in range(totalTimeUnits)]
         curTimeUnit = 0
         for note in oneTrack.notesTimed:

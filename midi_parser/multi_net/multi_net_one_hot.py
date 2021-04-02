@@ -27,6 +27,7 @@ class OneHotEncoderMultiNet(OneHotEncoder):
 
 
     def encode(self, sequences, n):
+        self.weightedPieces = self._getPiecesWeights(sequences)
         xNotes,yNotes, xTimes,yTimes = self._randInds(sequences, n)
         return self.oneHotEncode(xNotes,yNotes, xTimes,yTimes)
 
@@ -36,7 +37,7 @@ class OneHotEncoderMultiNet(OneHotEncoder):
         xTimes = []
         yTimes = []
         for i in range(n):
-            pieceInd = np.random.randint(len(sequences[0]))
+            pieceInd = np.random.choice(range(len(sequences)), p = self.weightedPieces)
             pieceNotes = sequences[pieceInd][0]
             pieceTimes = sequences[pieceInd][1]
             assert len(pieceNotes)==len(pieceTimes)
@@ -49,7 +50,10 @@ class OneHotEncoderMultiNet(OneHotEncoder):
                 xTimes.append(pieceTimes[start:end])
                 yTimes.append(pieceTimes[end])
         return xNotes,yNotes, xTimes,yTimes
-    
+
+    def _getPiecesWeights(self, sequences):
+        tot = sum([len(piece[0]) for piece in sequences])
+        return list(map(lambda x: len(x[0])/tot, sequences))
 
     def oneHotEncode(self, xNotes,yNotes, xTimes,yTimes):
         nSamples = len(xNotes)

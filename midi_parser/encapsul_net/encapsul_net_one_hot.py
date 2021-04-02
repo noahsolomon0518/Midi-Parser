@@ -39,7 +39,7 @@ class OneHotEncoderEncapsulNet(OneHotEncoder):
         xOctaves = []
         yOctaves = []
         for i in range(n):
-            pieceInd = np.random.randint(len(sequences[0]))
+            pieceInd = np.random.randint(len(sequences))
             pieceNotes = sequences[pieceInd][0]
             pieceTimes = sequences[pieceInd][1]
             pieceOctaves = sequences[pieceInd][2]
