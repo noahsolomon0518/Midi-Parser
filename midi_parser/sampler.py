@@ -35,26 +35,6 @@ fs.program_select(0, sfid, 0, 0)
 '''
 
 
-
-
-#Saves smpfiles as well as regular pieces
-def saveSmp(piece, filepath):
-    if ".smp" not in filepath:
-        filepath += ".smp"
-    outfile = open(filepath,'wb')
-    if(type(piece)==SmpFile):
-        piece = piece.piece
-        
-    pickle.dump(piece, outfile)
-    outfile.close()
-    
-def loadSmp(filepath):
-    
-    infile = open(filepath,'rb')
-    piece = SmpFile(pickle.load(infile))
-    infile.close()
-    return piece
-
 #Mixes up probabilities of multinomial distribution (prediction of music neural network)
 def sample(preds, temperature = 0.5):
     preds = np.asarray(preds).astype('float64')
