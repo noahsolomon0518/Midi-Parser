@@ -4,7 +4,7 @@ Created on Tue Feb 23 13:45:41 2021
 
 @author: noahs
 """
-
+import math
 import keras
 import fluidsynth
 import time
@@ -56,19 +56,43 @@ def findMidis(folder, r=True):
 
 
 class MidiToDecimal:
-    '''All encoders go through 3 main steps: 
-        1. MidiToDecimal._pathsToMido -> converts all queued up paths to mido objects
-                                         completely encapsulated
+    # All encoders go through 3 main steps: 
+    #    1. MidiToDecimal._pathsToMido -> converts all queued up paths to mido objects
+    #                                     completely encapsulated
+    #
+    #    2. MidiToDecimal._midosToOT -> convert all midos into OneTrack objects 
+    #                                   !must add _convertMidoToOneTrack(mido) to implementation
+    #
+    #    3. MidiToDecimal._OTEncode -> encodes all OneTrack objects to decimal encoded list
+    #                                  !must add _OTEncodeOne(oneTrack) to implementation
+   
+    """
+    Abstract class for all implementations of decimal encoders
 
-        2. MidiToDecimal._midosToOT -> convert all midos into OneTrack objects 
-                                       !must add _convertMidoToOneTrack(mido) to implementation
+    Parameters
+    ----------
+    folder: str
+        Path at which midis of interest are
+    
+    nOctaves: int
+        How many distinct octaves will encode
+    
+    debug: bool
+        Saves all steps of data transformation
 
-        3. MidiToDecimal._OTEncode -> encodes all OneTrack objects to decimal encoded list
-                                      !must add _OTEncodeOne(oneTrack) to implementation
-    '''
-    def __init__(self, folder,  maxOctaves = 4, debug=False, r=True, convertToC = True,  scales = "both"):
+    r: bool
+        If to recursively extract midis from folder
+    
+    convertToC: bool
+        If want to convert all midis to same key of C. Will not extract midis without key sigs
+    
+    scales: str in ["major", "minor", "both"]
+        If want to only extract major, minor, or both types of keys
+    """
+    def __init__(self, folder,  nOctaves, smallestTimeUnit, debug=False, r=True, convertToC = True,  scales = "both"):
         self.convertToC = convertToC
-        self.maxOctaves = maxOctaves
+        self.smallestTimeUnit = smallestTimeUnit
+        self.nOctaves = nOctaves
         self.scales = scales
         self.midos = []
         self.oneTracks = []
@@ -78,10 +102,11 @@ class MidiToDecimal:
         self.debug = debug
 
 
-    #queues more folders
     def addFolders(self, folder, r=True):
         self.paths.extend(findMidis(folder, r))
-
+    """
+    Queues up more folders to parse
+    """
 
     #call when all midi folders added
     def encode(self):
@@ -225,11 +250,13 @@ class OneTrack:
         "B":11
     }
 
-    def __init__(self, mido, convertToC = True, scales = "both", maxOctaves = 4):
-        assert maxOctaves in [2,4,6,8]
+    def __init__(self, mido, smallestTimeUnit, convertToC = True, scales = "both", nOctaves = 4):
+        assert nOctaves in [2,4,6,8]
+        assert type(smallestTimeUnit) == float
         self.mido = mido
-        self.maxOctaves = maxOctaves
-        self.minNote, self.maxNote = OneTrack.calcMinMaxNote(maxOctaves)
+        self.smallestTimeUnit = smallestTimeUnit
+        self.nOctaves = nOctaves
+        self.minNote, self.maxNote = OneTrack.calcMinMaxNote(nOctaves)
         self.convertToC = convertToC
         self.scales = scales
         self.microSecsPerBeat = OneTrack.DEFAULT_MICRO_SECS_PER_BEAT
@@ -263,9 +290,9 @@ class OneTrack:
 
 
     @staticmethod
-    def calcMinMaxNote(maxOctaves):
-        maxNote = OneTrack.MIDDLE_C + (maxOctaves/2) * OneTrack.NOTES_PER_OCTAVE
-        minNote = OneTrack.MIDDLE_C - (maxOctaves/2) * OneTrack.NOTES_PER_OCTAVE
+    def calcMinMaxNote(nOctaves):
+        maxNote = OneTrack.MIDDLE_C + (nOctaves/2) * OneTrack.NOTES_PER_OCTAVE
+        minNote = OneTrack.MIDDLE_C - (nOctaves/2) * OneTrack.NOTES_PER_OCTAVE
         return int(minNote), int(maxNote)
 
 
@@ -335,12 +362,8 @@ class OneTrack:
 
     #Can define custom time conversions in different implementations
     def _timeConversion(self, _time):
-        return _time
-    '''
-    def _convertTicksToMSTimeUnits(self, ticks):
-        msTimeUnits = (ticks*(1/self.tpb)*self.microSecsPerBeat)//1000
-        return int(max([msTimeUnits, 1]))   #Ensures atleast 1 timeunit
-    '''
+        return int(math.ceil(_time*(1/self.tpb)/4/self.smallestTimeUnit))
+
 
 
 

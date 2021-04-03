@@ -3,17 +3,27 @@ import math
 
 
 class OneTrackVanilla(OneTrack):
-    def __init__(self, mido, convertToC = True, scales = "both", maxOctaves = 4, smallestTimeUnit = 1/32):
-        self.smallestTimeUnit = smallestTimeUnit
-        super().__init__(mido, convertToC = True, scales = "both", maxOctaves = maxOctaves)
+    def __init__(self, mido, nOctaves, smallestTimeUnit, convertToC = True, scales = "both"):
+        super().__init__(
+            mido, 
+            convertToC = True, 
+            scales = "both", 
+            nOctaves = nOctaves, 
+            smallestTimeUnit = smallestTimeUnit)
     
     #Converts ticks to number of <smallestTimeUnit>nd notes. 
-    def _timeConversion(self, _time):
-        return int(math.ceil(_time*(1/self.tpb)/4/self.smallestTimeUnit))
+
+
+
+
 
 class OTEncoderOnOff(OTEncoder):
-    def __init__(self, oneTracks):
-        super().__init__(oneTracks)
+    def __init__(self, oneTracks, nClassesTimes):
+        self.nOctaves = oneTracks[0].nOctaves
+        self.minNote = oneTracks[0].minNote
+        self.maxNote = oneTracks[0].maxNote
+        self.totalNotes = self.maxNote - self.minNote
+        super().__init__(oneTracks)      #Min note extracted from onetrack
 
 
     def _encodeOneMido(self, oneTrack):
@@ -27,17 +37,17 @@ class OTEncoderOnOff(OTEncoder):
 
     def _encodeOneNote(self, note):
         waitTime = []
-        waitTime = [175+note.time] if note.time > 0 else []
+        waitTime = [2*(self.totalNotes)-1+note.time] if note.time > 0 else []
         if(note.type == "note_on"):
         
             if(note.velocity == 0):
-                waitTime.append(note.note)
+                waitTime.append(note.note-self.minNote)
                 return waitTime
             else:
-                waitTime.append(note.note+88)
+                waitTime.append(note.note-self.minNote+self.totalNotes)
                 return waitTime
         else:
-            waitTime.append(note.note)
+            waitTime.append(note.note-self.minNote)
             return waitTime
 
 
@@ -45,17 +55,30 @@ class OTEncoderOnOff(OTEncoder):
 
 
 class MidiToDecimalOnOff(MidiToDecimal):
-    def __init__(self, folder, maxOctaves = 4, debug=False, r=True, convertToC = True,  scales = "both", smallestTimeUnit = 1/32):
-        self.smallestTimeUnit = smallestTimeUnit
-        super().__init__(folder, maxOctaves = maxOctaves, debug=debug, r=r, convertToC = convertToC,  scales = scales)
+    def __init__(self, folder, smallestTimeUnit, nClassesTimes,  nOctaves = 4, debug=False, r=True, convertToC = True,  scales = "both"):
+        
+        self.nClassesTimes = nClassesTimes
+        super().__init__(
+            folder, 
+            smallestTimeUnit = smallestTimeUnit,
+            nOctaves = nOctaves, 
+            debug=debug, 
+            r=r, 
+            convertToC = convertToC,  
+            scales = scales)
     
 
     #Uses vanilla OneTrack to encode
     def _initOneTrack(self, mido):
-        return OneTrackVanilla(mido, self.convertToC, self.scales, self.maxOctaves, self.smallestTimeUnit)
+        return OneTrackVanilla(
+            mido, 
+            convertToC = self.convertToC, 
+            scales = self.scales, 
+            nOctaves = self.nOctaves, 
+            smallestTimeUnit = self.smallestTimeUnit)
 
     def _initOTEncoder(self, oneTracks):
-        return OTEncoderOnOff(oneTracks)
+        return OTEncoderOnOff(oneTracks, self.nClassesTimes)
 
 
     

@@ -6,8 +6,8 @@
 # !!!NOTE: When calling Sampler.saveSampler the path is relative
 #          To the environment variable "MUSICSAMPLER"
 
-
-
+import threading
+import time
 import os
 from os.path import join, relpath
 import numpy as np
@@ -69,7 +69,9 @@ def encodeFromOneHot(generated):
 #Piece only records timing and notes
 #2 purposes include storing piece and converting to standard format
 class Piece:
-    def __init__(self, piece, smallestTimeUnit):
+    def __init__(self, piece, smallestTimeUnit, nOctaves):
+        assert nOctaves%2 == 0
+        self.minNote = self._calcMinNote(nOctaves)            #Used to take in consideration number of octaves when converting
         self.smallestTimeUnit = smallestTimeUnit
         piece = self.convertToOnOff(piece)
         self.piece = self._removeDup(piece)
@@ -87,6 +89,9 @@ class Piece:
                         break
                     back+=1
         return piece
+
+    def _calcMinNote(self, nOctaves):
+        return 60 - (int(nOctaves/2) * 12)
 
     #Must define convertToOnOff in child classes
     def convertToOnOff(self, piece):
@@ -127,7 +132,6 @@ class Piece:
         mid.save(path)
 
     def _addMessage(self, dt, message, track):
-        #If note off
         if(message<88):
             track.append(Message('note_off', note=message, velocity=127, time=dt))
         elif(message<176):
@@ -143,8 +147,8 @@ class OnOffPiece(Piece):
     #Wait Time -> 175 + <number of time units>
     
 
-    def __init__(self, piece, smallestTimeUnit):
-        super().__init__(piece, smallestTimeUnit)
+    def __init__(self, piece, smallestTimeUnit, nOctaves):
+        super().__init__(piece, smallestTimeUnit, nOctaves)
 
     #Already in standard form
     def convertToOnOff(self, piece):
@@ -158,8 +162,8 @@ class OnOnlyPiece(Piece):
     # <pitch number> <time units player for>
     # 88 is waiting time unit
 
-    def __init__(self, piece, smallestTimeUnit):
-        super().__init__(piece, smallestTimeUnit)
+    def __init__(self, piece, smallestTimeUnit, nOctaves):
+        super().__init__(piece, smallestTimeUnit, nOctaves)
 
     
     def convertToOnOff(self, piece):
@@ -178,8 +182,8 @@ class OnOnlyPiece(Piece):
                 if(evt==88):
                     currentTimeUnit += piece[i+1]
                 else:
-                    notesByTimeUnit[currentTimeUnit].append(88+evt)
-                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt)    #Signals note off
+                    notesByTimeUnit[currentTimeUnit].append(88+(evt-self.minNote))
+                    notesByTimeUnit[currentTimeUnit+piece[i+1]].append(evt-self.minNote)    #Signals note off
         return notesByTimeUnit
 
     #If there are many 176's right next to each other they can be combined
@@ -194,14 +198,20 @@ class OnOnlyPiece(Piece):
                 convertedPiece.append(176)    #Each timeunit represents 176
         return convertedPiece
 
+
+
+#Each piece has 2 components in form of lists
+#1. The signal: Either a note or waiting signal
+#2. Time units: Number of time units note is played for
 class MultiNetPiece(OnOnlyPiece):
-    def __init__(self, piece, smallestTimeUnit):
-        super().__init__(piece, smallestTimeUnit)
+    def __init__(self, piece, smallestTimeUnit, nOctaves):
+        
+        super().__init__(piece, smallestTimeUnit, nOctaves)
 
     def convertToOnOff(self, piece):
         onOnlyConverted = []
         for note,time in zip(piece[0], piece[1]):
-            onOnlyConverted.extend([note,time])
+            onOnlyConverted.extend([note-self.minNote,time])
         return OnOnlyPiece.convertToOnOff(self, onOnlyConverted)
 
 
@@ -257,8 +267,27 @@ class Player:
 
 
 class Generator:
+    """
+    Abstract class for the music generators
+
+    Parameters
+    ----------
+    model: Keras NN
+        A trained keras neural network of compatible type
+
+    xTrain: Numpy Array
+        The one hot encoded training data that was used train the NN
+
+    smallestTimeUnit: float
+        The fraction of a 4/4 measure to consider the smallest time unit 
     
-    def __init__(self, model, xTrain, smallestTimeUnit):
+    nOctaves: even int
+        Number of octaves that the model was trained with. Can only be 2,4,6 or 8
+    
+    """
+    
+    def __init__(self, model, xTrain, smallestTimeUnit, nOctaves):
+        self.nOctaves = nOctaves
         self.smallestTimeUnit = smallestTimeUnit
         self.model = model
         self.maxLen = len(xTrain[0])
@@ -266,6 +295,20 @@ class Generator:
         self.generated = []
 
     def generate(self, temp, nNotes):
+        assert type(nNotes) == int
+        assert type(temp) in [float, int]
+        """
+        Generates new music using model of compatible type
+
+        Parameters
+        ----------
+        temp: float
+            Float larger than 0. A temp>1 results in more random generations and temp<1 results in less random
+        
+        nNotes: int
+            Number of notes the will be generated
+        """
+
         generated = self._generate(temp, nNotes)
         self.generated.append(generated)
         return generated
@@ -282,8 +325,8 @@ class Generator:
         
 
 class OnOffGenerator(Generator):
-    def __init__(self, model, xTrain, smallestTimeUnit):
-        super().__init__(model,xTrain, smallestTimeUnit)
+    def __init__(self, model, xTrain, smallestTimeUnit, nOctaves):
+        super().__init__(model,xTrain, smallestTimeUnit, nOctaves)
     
     def _generate(self, temp, nNotes = 500):
         piece = []
@@ -292,33 +335,33 @@ class OnOffGenerator(Generator):
         for i in range(nNotes):
             priorNotes = self._getPriorNotes(generated)
             preds = self.model.predict(priorNotes)
-            argMax = sample(preds, temp)
+            argMax = sample(preds[0], temp)
             piece.append(argMax)
             generated = np.concatenate([generated,preds])
         piece = self._convertToPieceObj(piece)
         return piece
     
     def _convertToPieceObj(self, piece):
-        return OnOffPiece(piece, self.smallestTimeUnit)
+        return OnOffPiece(piece, self.smallestTimeUnit, self.nOctaves)
     
 
 
 
 #Same exact process as OnOffGenerator except for the type of the piece
 class OnOnlyGenerator(OnOffGenerator):
-    def __init__(self, model, xTrain, smallestTimeUnit):
-        super().__init__(model,xTrain, smallestTimeUnit)
+    def __init__(self, model, xTrain, smallestTimeUnit, nOctaves):
+        super().__init__(model,xTrain, smallestTimeUnit, nOctaves)
     
 
     def _convertToPieceObj(self, piece):
-        return OnOnlyPiece(piece, self.smallestTimeUnit)
+        return OnOnlyPiece(piece, self.smallestTimeUnit, self.nOctaves)
     
     
 
 
 class MultiNetGenerator(Generator):
-    def __init__(self, model, xTrain, smallestTimeUnit):
-        super().__init__(model,xTrain, smallestTimeUnit)
+    def __init__(self, model, xTrain, smallestTimeUnit, nOctaves):
+        super().__init__(model,xTrain, smallestTimeUnit, nOctaves)
 
     def _generate(self, temp, nNotes):
         piece = []
@@ -332,7 +375,7 @@ class MultiNetGenerator(Generator):
             piece.extend([argmaxNotes,argmaxTimes])
             preds = np.concatenate([predNotes, predTimes], axis = 1)
             generated = np.concatenate([generated,preds])
-        return MultiNetPiece(piece, self.smallestTimeUnit)
+        return MultiNetPiece(piece, self.smallestTimeUnit, self.nOctaves)
 
 
 

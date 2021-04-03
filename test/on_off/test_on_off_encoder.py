@@ -1,5 +1,4 @@
-from midi_parser.on_off import MidiToDecimalOnOff
-from midi_parser import Player
+from midi_parser.on_off import MidiToDecimalOnOff, OnOffPiece
 
 
 
@@ -7,7 +6,7 @@ import unittest
 
 
 
-encoderOnOff = MidiToDecimalOnOff("C:/Users/noahs/Data Science/Music Generation AI/data/testing",  debug = True, maxOctaves=4, smallestTimeUnit=  1/32)
+encoderOnOff = MidiToDecimalOnOff("C:/Users/noahs/Data Science/Music Generation AI/data/testing",  debug = True, nOctaves=8, smallestTimeUnit=  1/32)
 encoderOnOff.encode()
 encodedOTs = encoderOnOff.encoded
 
@@ -26,7 +25,12 @@ class TestOTEncoderOnOff(unittest.TestCase):
                 self.assertGreater(note, 0)
     
     def test_play(self):
-        Player.play(encodedOTs[0], smallestTimeUnit = 1/32, tempo = 150)
+        piece = OnOffPiece(encodedOTs[0], nOctaves = 8, smallestTimeUnit = 1/32)
+        piece.play(tempo = 150)
+
+
+
+
         
 
 

@@ -14,7 +14,7 @@ TODO: Combine functionality with OneHotEncodeEncapsulNet
 '''
 
 class OneHotEncoderMultiNet(OneHotEncoder):
-    def __init__(self, lookback=30, startThresh = 20, octaves = 4, nClassesTimes = 100):
+    def __init__(self, lookback=30, startThresh = 20, octaves = 4, nClassesTimes = 20):
         self.minNote, self.maxNote = OneTrack.calcMinMaxNote(octaves)
         nClassesNotes = self.maxNote - self.minNote
         self.startThresh = startThresh
